@@ -1,7 +1,9 @@
-import { IVectorDB, SearchResult, VectorData } from '../types/structures';
+import { EmbededData, IVectorDB, SearchResult, SearchResults } from '../types/structures';
 import { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
 import { loadHnswlib, syncFileSystem, HnswlibModule } from 'hnswlib-wasm';
 import { normalizePath, App } from 'obsidian';
+
+// TODO: 250923 벡터 인덱싱과 검색만을 담당하는 클래스로서의 역할을 상기하며 각 함수와 데이터가 알맞게 짜여져 있는지 확인
 
 /**
  * HNSWLib를 사용한 고성능 벡터 데이터베이스 어댑터 클래스입니다.
@@ -22,9 +24,7 @@ export class HNSWLibAdapter implements IVectorDB {
     private hnswIndex: HierarchicalNSW;
     private indexFileName: string;
     private dimension: number;
-    private labelToIdMap: Map<number, number> = new Map();
-    private idToLabelMap: Map<number, number> = new Map();
-    private vectorDataMap: Map<number, VectorData> = new Map();
+    private idToVectorMap: Map<number, number[]> = new Map();
 
     /**
      * HNSWLibAdapter 인스턴스를 생성합니다.
@@ -90,20 +90,20 @@ export class HNSWLibAdapter implements IVectorDB {
      * const vectorData = [{
      *   id: 1,
      *   vector: [0.1, 0.2, 0.3, ...],
-     *   metadata: { filePath: 'note.md', key: 'heading1', text: '내용' }
+     *   metadata: { filePath: 'note.md', key: 'heading1', tex: '내용' }
      * }];
      * await adapter.addItem(vectorData);
      * ```
      */
-    async addItem(data: VectorData[]): Promise<void> {
+    async addItems(data: EmbededData[]): Promise<void> {
         if (!this.hnswIndex) throw new Error("Index is not initialized.");
 
         const vectorsToAdd: number[][] = [];
-        const itemsToAdd: VectorData[] = [];
+        const ids: number[] = [];
 
         // 데이터 검증 및 필터링
         for (const each of data) {
-            // 벡터 유효성 검사
+            // 벡터 유효성 검사t
             if (!each.vector || each.vector.length === 0) {
                 console.warn(`빈 벡터 건너뛰기: ID ${each.id}`);
                 continue;
@@ -120,30 +120,24 @@ export class HNSWLibAdapter implements IVectorDB {
                 continue;
             }
             
-            // 중복 체크
-            if (!this.idToLabelMap.get(each.id)) {
-                vectorsToAdd.push(each.vector);
-                itemsToAdd.push(each);
-            }
+            // TODO: 중복 체크
+
+            // 원소 추가
+            ids.push(each.id);
+            vectorsToAdd.push(each.vector);
+            this.idToVectorMap.set(each.id, each.vector);
         }
 
-        if (itemsToAdd.length === 0) {
+        if (ids.length === 0) {
             console.log("추가할 유효한 벡터가 없습니다.");
             return;
         }
 
         try {
-            console.log(`${itemsToAdd.length}개 벡터 추가 시작`);
-            const labels = this.hnswIndex.addItems(vectorsToAdd, false);
-
-            labels.forEach((label, i) => {
-                const item = itemsToAdd[i];
-                this.labelToIdMap.set(label, item.id);
-                this.idToLabelMap.set(item.id, label);
-                this.vectorDataMap.set(item.id, item);
-            });
+            console.log(`${ids.length}개 벡터 추가 시작`);
+            await this.hnswIndex.addPoints(vectorsToAdd, ids, false);
             
-            console.log(`${labels.length}개 벡터 추가 완료`);
+            console.log(`${ids.length}개 벡터 추가 완료`);
         } catch (error) {
             console.error("HNSW 인덱스 추가 실패:", error);
             throw error;
@@ -167,41 +161,25 @@ export class HNSWLibAdapter implements IVectorDB {
      * });
      * ```
      */
-    async search(queryVector: number[], top_k: number): Promise<SearchResult[]> {
+    // DONE: search 재구현
+    async search(queryVector: number[], top_k: number): Promise<SearchResults> {
         const result = this.hnswIndex.searchKnn(queryVector, top_k, undefined);
 
-        const searchresults: SearchResult[] = [];
+        const returnValue: SearchResults = { results: [] };
 
         for (let i = 0; i < result.neighbors.length; i++) {
             const label = result.neighbors[i];
             const score = result.distances[i];
 
-            const id = this.labelToIdMap.get(label);
-
-            if (id === undefined) {
-                continue;
-            }
-
-            const originalData = this.vectorDataMap.get(id);
-
-            if (originalData === undefined) {
-                continue;
-            }
-
             const eachResult: SearchResult = ({
-                id: id,
+                id: label,
                 score: 1 - score, 
-                metadata: {
-                    filePath: originalData.metadata.filePath,
-                    key: originalData.metadata.key,
-                    text: originalData.metadata.text,
-                }
             });
 
-            searchresults.push(eachResult);
+            returnValue.results.push(eachResult);
         }
 
-        return searchresults;
+        return returnValue;
     }
     
     /**
@@ -211,25 +189,17 @@ export class HNSWLibAdapter implements IVectorDB {
      * @returns Promise<void>
      */
     async removeItem(id: number): Promise<void> {
-        const idToLabel = this.getIdToLabelMap();
-        const labelToId = this.getLabelToIdMap();
-        const label = idToLabel.get(id);
-        
-        if (label === undefined) {
-            console.warn(`ID ${id}에 해당하는 라벨을 찾을 수 없습니다.`);
+        if (this.idToVectorMap.get(id) === undefined) {
+            console.warn(`ID ${id}에 해당하는 벡터을 찾을 수 없습니다.`);
             return;
         }
         
         try {
             // HNSW 인덱스에서 제거
-            this.hnswIndex.markDelete(label);
+            this.hnswIndex.markDelete(id);
+            this.idToVectorMap.delete(id);
             
-            // 매핑에서 제거
-            idToLabel.delete(id);
-            labelToId.delete(label);
-            this.vectorDataMap.delete(id);
-            
-            console.log(`벡터 제거 완료: ID=${id}, Label=${label}`);
+            console.log(`벡터 제거 완료: ID=${id}`);
         } catch (error) {
             console.error(`벡터 제거 실패: ID=${id}`, error);
             throw error;
@@ -269,28 +239,12 @@ export class HNSWLibAdapter implements IVectorDB {
      * ```
      */
     async saveMaps(): Promise<void> {
-        const idToLabel = this.getIdToLabelMap();
-		const labelToId = this.getLabelToIdMap();
-		const vectorDataMap = this.getVectorDataMap();
-		
-		console.log(`맵 저장 시작 - ID→Label: ${idToLabel.size}개, Label→ID: ${labelToId.size}개, VectorData: ${vectorDataMap.size}개`);
-
-		// 빈 맵 체크
-		if (idToLabel.size === 0) {
-			console.warn("저장할 맵이 비어있습니다!");
-			return;
-		}
-
-		const saveIdToLabel = JSON.stringify(Object.fromEntries(idToLabel), null, 2);
-		const saveLabelToId = JSON.stringify(Object.fromEntries(labelToId), null, 2);
-		const saveVectorDataMap = JSON.stringify(Object.fromEntries(vectorDataMap), null, 2);
+		const saveIdToVector = JSON.stringify(Object.fromEntries(this.idToVectorMap), null, 2);
 
 		const pluginPath = normalizePath(`${this.app.vault.configDir}/plugins/Chumsa`);
 		
 		try {
-			await this.app.vault.adapter.write(`${pluginPath}/ID_TO_LABEL_MAP.json`, saveIdToLabel);
-			await this.app.vault.adapter.write(`${pluginPath}/LABEL_TO_ID_MAP.json`, saveLabelToId);
-			await this.app.vault.adapter.write(`${pluginPath}/VECTOR_DATA_MAP.json`, saveVectorDataMap);
+			await this.app.vault.adapter.write(`${pluginPath}/ID_TO_VECTOR.json`, saveIdToVector);
 			console.log("맵 저장 완료");
 		} catch (error) {
 			console.error("맵 저장 실패:", error);
@@ -311,40 +265,17 @@ export class HNSWLibAdapter implements IVectorDB {
      * ```
      */
     async loadMaps(): Promise<void> {
+        const mapPath = normalizePath(`${this.app.vault.configDir}/plugins/Chumsa/ID_TO_VECTOR.json`);
+        try {
+            const idToVectorString = await this.app.vault.adapter.read(mapPath);
 
-        const mapPaths = {
-            idToLabel: normalizePath(`${this.app.vault.configDir}/plugins/Chumsa/ID_TO_LABEL_MAP.json`),
-            labelToId: normalizePath(`${this.app.vault.configDir}/plugins/Chumsa/LABEL_TO_ID_MAP.json`),
-            vectorData: normalizePath(`${this.app.vault.configDir}/plugins/Chumsa/VECTOR_DATA_MAP.json`),
-        };
+            const idToVectorObj = JSON.parse(idToVectorString);
 
-    try {
-        const [idToLabelJson, labelToIdJson, vectorDataJson] = await Promise.all([
-            this.app.vault.adapter.read(mapPaths.idToLabel),
-            this.app.vault.adapter.read(mapPaths.labelToId),
-            this.app.vault.adapter.read(mapPaths.vectorData),
-        ]);
-
-        const idToLabelObj = JSON.parse(idToLabelJson);
-        const labelToIdObj = JSON.parse(labelToIdJson);
-        const vectorDataObj = JSON.parse(vectorDataJson);
-        
-        this.idToLabelMap = new Map(
-            Object.entries(idToLabelObj).map(([key, value]) => [Number(key), value as number])
-        );
-
-        this.labelToIdMap = new Map(
-            Object.entries(labelToIdObj).map(([key, value]) => [Number(key), value as number])
-        );
-
-        this.vectorDataMap = new Map(
-            Object.entries(vectorDataObj).map(([key, value]) => [Number(key), value as VectorData])
-        );
-
+            this.idToVectorMap = new Map(
+                Object.entries(idToVectorObj).map(([key, value]) => [Number(key), value as number[]])
+            );
         } catch (error) {
-            this.idToLabelMap.clear();
-            this.labelToIdMap.clear();
-            this.vectorDataMap.clear();
+            this.idToVectorMap.clear();
         }
     }
     
@@ -360,10 +291,8 @@ export class HNSWLibAdapter implements IVectorDB {
      * console.log('모든 매핑 데이터 초기화 완료');
      * ```
      */
-    async resetMaps() {
-        this.labelToIdMap = new Map();
-        this.idToLabelMap = new Map();
-        this.vectorDataMap = new Map();
+    async resetMap() {
+        this.idToVectorMap.clear();
     }
 
     /**
@@ -401,39 +330,10 @@ export class HNSWLibAdapter implements IVectorDB {
         this.hnswIndex.initIndex(maxElements, 32, 150, 42);
         this.hnswIndex.setEfSearch(32);
         
-        await this.resetMaps();
+        await this.resetMap();
         this.save();
     }
 
-    /**
-     * ID-라벨 매핑 맵을 반환합니다.
-     * 
-     * @returns Map<number, number> - ID를 키로 하고 라벨을 값으로 하는 매핑
-     * 
-     * @example
-     * ```typescript
-     * const idToLabelMap = adapter.getIdToLabelMap();
-     * console.log('ID 1의 라벨:', idToLabelMap.get(1));
-     * ```
-     */
-    getIdToLabelMap() {
-        return this.idToLabelMap;
-    }
-
-    /**
-     * 라벨-ID 매핑 맵을 반환합니다.
-     * 
-     * @returns Map<number, number> - 라벨을 키로 하고 ID를 값으로 하는 매핑
-     * 
-     * @example
-     * ```typescript
-     * const labelToIdMap = adapter.getLabelToIdMap();
-     * console.log('라벨 100의 ID:', labelToIdMap.get(100));
-     * ```
-     */
-    getLabelToIdMap() {
-        return this.labelToIdMap;
-    }
 
     /**
      * 벡터 데이터 매핑 맵을 반환합니다.
@@ -448,7 +348,7 @@ export class HNSWLibAdapter implements IVectorDB {
      * console.log('ID 1의 텍스트:', data?.metadata.text);
      * ```
      */
-    getVectorDataMap() {
-        return this.vectorDataMap;
+    getIdToVectorMap() {
+        return this.idToVectorMap;
     }
 }
