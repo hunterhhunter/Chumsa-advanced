@@ -3,7 +3,7 @@ import { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
 import { loadHnswlib, syncFileSystem, HnswlibModule } from 'hnswlib-wasm';
 import { normalizePath, App } from 'obsidian';
 
-// TODO: 250923 벡터 인덱싱과 검색만을 담당하는 클래스로서의 역할을 상기하며 각 함수와 데이터가 알맞게 짜여져 있는지 확인
+// DONE: 250923 벡터 인덱싱과 검색만을 담당하는 클래스로서의 역할을 상기하며 각 함수와 데이터가 알맞게 짜여져 있는지 확인
 
 /**
  * HNSWLib를 사용한 고성능 벡터 데이터베이스 어댑터 클래스입니다.
@@ -296,6 +296,11 @@ export class HNSWLibAdapter implements IVectorDB {
      */
     async resetMap() {
         this.idToVectorMap.clear();
+        const mapPath = normalizePath(`${this.app.vault.configDir}/plugins/Chumsa/ID_TO_VECTOR.json`);
+        const isExist = 
+        if (isExist === undefined) {
+
+        }
     }
 
     /**
