@@ -29,7 +29,7 @@ export class HNSWLibAdapter implements IVectorDB {
     /**
      * HNSWLibAdapter 인스턴스를 생성합니다.
      * 
-     * @param app - Obsidian 앱 인스턴스로, 파일 시스템 접근에 사용됩니다.
+     * @param app - Obsidian 앱 인스턴스로, 파일 시스\\템 접근에 사용됩니다.
      * 
      * @example
      * ```typescript
@@ -120,7 +120,10 @@ export class HNSWLibAdapter implements IVectorDB {
                 continue;
             }
             
-            // TODO: 중복 체크
+            if (this.idToVectorMap.has(each.id)) {
+                console.warn(`이미 존재하는 ID 값: ID ${each.id}`);
+                continue;
+            }
 
             // 원소 추가
             ids.push(each.id);
