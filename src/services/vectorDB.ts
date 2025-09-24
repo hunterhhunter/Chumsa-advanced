@@ -22,7 +22,6 @@ export class VectorDB {
 
     async insert(item: EmbededData) {
         // TODO: 파일 - 블럭 매핑 저장 로직 작성
-        await this.index.addItems(item.vector);
     }
 
 

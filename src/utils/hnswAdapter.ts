@@ -103,7 +103,7 @@ export class HNSWLibAdapter implements IVectorDB {
 
         // 데이터 검증 및 필터링
         for (const each of data) {
-            // 벡터 유효성 검사t
+            // 벡터 유효성 검사
             if (!each.vector || each.vector.length === 0) {
                 console.warn(`빈 벡터 건너뛰기: ID ${each.id}`);
                 continue;
@@ -120,6 +120,7 @@ export class HNSWLibAdapter implements IVectorDB {
                 continue;
             }
             
+            // 중복 제거
             if (this.idToVectorMap.has(each.id)) {
                 console.warn(`이미 존재하는 ID 값: ID ${each.id}`);
                 continue;
@@ -131,6 +132,8 @@ export class HNSWLibAdapter implements IVectorDB {
             this.idToVectorMap.set(each.id, each.vector);
         }
 
+        console.log('ids: %d, vectors: %d', ids.length, vectorsToAdd.length)
+
         if (ids.length === 0) {
             console.log("추가할 유효한 벡터가 없습니다.");
             return;
@@ -139,7 +142,6 @@ export class HNSWLibAdapter implements IVectorDB {
         try {
             console.log(`${ids.length}개 벡터 추가 시작`);
             await this.hnswIndex.addPoints(vectorsToAdd, ids, false);
-            
             console.log(`${ids.length}개 벡터 추가 완료`);
         } catch (error) {
             console.error("HNSW 인덱스 추가 실패:", error);
@@ -297,9 +299,9 @@ export class HNSWLibAdapter implements IVectorDB {
     async resetMap() {
         this.idToVectorMap.clear();
         const mapPath = normalizePath(`${this.app.vault.configDir}/plugins/Chumsa/ID_TO_VECTOR.json`);
-        const isExist = 
-        if (isExist === undefined) {
-
+        const isExist = await this.app.vault.adapter.exists(mapPath);
+        if (isExist) {
+            await this.app.vault.adapter.remove(mapPath);
         }
     }
 
