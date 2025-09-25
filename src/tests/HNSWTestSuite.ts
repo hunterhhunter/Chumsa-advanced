@@ -1,7 +1,7 @@
 import { TestRunner, TestCase } from './TestRunner';
 import { HNSWLibAdapter } from '../utils/hnswAdapter';
 import { EmbededData } from '../types/structures';
-import { App } from 'obsidian';
+import { App, normalizePath } from 'obsidian';
 
 export class HNSWTestSuite {
     private testRunner: TestRunner;
@@ -37,6 +37,11 @@ export class HNSWTestSuite {
             {
                 name: 'search 기능 테스트',
                 fn: () => this.testSearchFunction(),
+                timeout: 15000
+            },
+            {
+                name: 'RoundTrip 테스트',
+                fn: () => this.roundTrip(),
                 timeout: 15000
             }
         ];
@@ -159,7 +164,7 @@ export class HNSWTestSuite {
         }
     }
 
-    // 🔍 search 기능 테스트 (기존 코드 그대로)
+    // 🔍 search 기능 테스트
     private async testSearchFunction(): Promise<void> {
         console.log('🔍 search 함수 테스트 실행');
 
@@ -211,6 +216,69 @@ export class HNSWTestSuite {
         } else {
             console.log('❌ search 함수 테스트: 실패');
             throw new Error('search 기능 테스트 실패');
+        }
+    }
+
+    private async roundTrip(): Promise<void> {
+        console.log('RoundTrip 함수 검증');
+
+        const adapter = new HNSWLibAdapter(this.app);
+        await adapter.initialize("roundTrip.hnsw", 3, 1000);
+
+        const vec1: EmbededData = { id: 1, vector: [1.0, 1.0, 1.0]};
+        const vec2: EmbededData = { id: 2, vector: [0.0, 1.0, 0.0]};
+        const vec3: EmbededData = { id: 3, vector: [0.0, 0.0, 1.0]};
+        const vec4: EmbededData = { id: 4, vector: [0.9, 0.9, 0.9]};
+        const vec5: EmbededData = { id: 5, vector: [0.0, 0.9, 0.9]};
+        const vec6: EmbededData = { id: 6, vector: [0.8, 0.8, 0.8]};
+
+        const vecs = [vec1, vec2, vec3, vec4, vec5, vec6];
+
+        await adapter.addItems(vecs);
+
+        console.log("인덱스 및 맵 저장");
+        await adapter.save();
+        console.log("인덱스 및 맵 저장 완료");
+
+        const mapPath = normalizePath(`${this.app.vault.configDir}/plugins/Chumsa/ID_TO_VECTOR.json`);
+        const isExist = await this.app.vault.adapter.exists(mapPath);
+
+        if ( isExist ) {
+            console.log("맵 저장 성공");
+        } else {
+            console.log("맵 저장 실패");
+            throw new Error("맵 저장 실패함");
+        }
+
+        console.log("인덱스 및 맵 불러오기");
+        const newAdapter = new HNSWLibAdapter(this.app);
+        await newAdapter.initialize('roundTrip.hnsw', 3, 1000);
+        await newAdapter.loadMaps();
+        console.log("인덱스 및 맵 불러오기 완료");
+
+        const loadedcnt = await newAdapter.count();
+        const loadedmap = await newAdapter.getIdToVectorMap();
+        const mapSize = loadedmap.size;
+
+        console.log(`${loadedcnt}, ${mapSize} check this`);
+        
+        await newAdapter.resetMap();
+
+        const isExist2 = await this.app.vault.adapter.exists(mapPath);
+
+        if (!isExist2) {
+            console.log("매핑파일 삭제 완료");
+        } else {
+            console.log("매핑파일 삭제 실패");
+            throw new Error("매핑파일 삭제 실패.");
+        }
+
+
+        if ( loadedcnt === 6 && mapSize === 6 ) {
+            console.log("불러온 Adapter 검증 완료");
+        } else {
+            console.log("불러온 Adapter 검증 실패");
+            throw new Error("라운드 트립 실패");
         }
     }
 

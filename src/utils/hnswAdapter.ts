@@ -244,7 +244,7 @@ export class HNSWLibAdapter implements IVectorDB {
      * ```
      */
     async saveMaps(): Promise<void> {
-		const saveIdToVector = JSON.stringify(Object.fromEntries(this.idToVectorMap), null, 2);
+		const saveIdToVector = JSON.stringify(Object.fromEntries(this.getIdToVectorMap()), null, 2);
 
 		const pluginPath = normalizePath(`${this.app.vault.configDir}/plugins/Chumsa`);
 		
@@ -301,6 +301,7 @@ export class HNSWLibAdapter implements IVectorDB {
         const mapPath = normalizePath(`${this.app.vault.configDir}/plugins/Chumsa/ID_TO_VECTOR.json`);
         const isExist = await this.app.vault.adapter.exists(mapPath);
         if (isExist) {
+            console.log("map 존재!")
             await this.app.vault.adapter.remove(mapPath);
         }
     }
