@@ -13,7 +13,9 @@
 	"author": "",
 	"license": "MIT",
 	"devDependencies": {
+		"@types/imurmurhash": "^0.1.4",
 		"@types/jest": "^29.5.12",
+		"@types/murmurhash3js-revisited": "^3.0.3",
 		"@types/node": "^16.18.126",
 		"@typescript-eslint/eslint-plugin": "5.29.0",
 		"@typescript-eslint/parser": "5.29.0",
@@ -27,6 +29,7 @@
 	},
 	"dependencies": {
 		"dotenv": "^17.2.2",
-		"hnswlib-wasm": "0.8.2"
+		"hnswlib-wasm": "0.8.2",
+		"murmurhash3js-revisited": "^3.0.0"
 	}
 }

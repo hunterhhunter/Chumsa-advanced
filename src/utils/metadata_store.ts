@@ -12,7 +12,7 @@ export class MetaDataStore {
     }
 
     // DONE: initialize 함수 선언
-    public async initialize(app: App) {
+    public async initialize() {
         // 메타데이터 맵.json 경로
         const mapPath = normalizePath(`${this.app.vault.configDir}/plugins/Chumsa/METADATA_MAP.json`);
         // JSON 파일 존재 확인

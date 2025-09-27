@@ -1,6 +1,8 @@
 import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
-import { HNSWTestSuite } from '../src/tests/HNSWTestSuite'; // 테스트 스위트만 import
-import { MetadataStoreTestSuite } from './tests/metadataStoreTestSuite';
+import { HNSWTestSuite } from './tests/HNSW_test_suite'; // 테스트 스위트만 import
+import { MetadataStoreTestSuite } from './tests/metadata_store_test_suite';
+import { BlockStore } from './utils/block_store';
+import { BlockStoreTestSuite } from './tests/block_store_test_suite';
 
 interface MyPluginSettings {
 	mySetting: string;
@@ -16,6 +18,7 @@ export default class MyPlugin extends Plugin {
 	// 🎯 테스트 스위트만 있으면 됨!
 	private testSuite: HNSWTestSuite;
 	private testSuite2: MetadataStoreTestSuite;
+	private testSuite3: BlockStoreTestSuite;
 
 	async onload() {
 		await this.loadSettings();
@@ -23,6 +26,7 @@ export default class MyPlugin extends Plugin {
 		// 🆕 테스트 스위트 초기화
 		this.testSuite = new HNSWTestSuite(this.app);
 		this.testSuite2 = new MetadataStoreTestSuite(this.app);
+		this.testSuite3 = new BlockStoreTestSuite(this.app);
 
 		// 기존 Obsidian 플러그인 코드들...
 		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
@@ -103,6 +107,10 @@ export default class MyPlugin extends Plugin {
 	getTestSuite2(): MetadataStoreTestSuite {
         return this.testSuite2;
     }
+
+	getTestSuite3(): BlockStoreTestSuite {
+		return this.testSuite3;
+	}
 }
 
 // =================== 설정창 (간단해진 버전) ===================
@@ -166,6 +174,29 @@ class SampleSettingTab extends PluginSettingTab {
 					try {
 						console.clear();
 						await this.plugin.getTestSuite2().runAllTests();
+						new Notice('전체 테스트 완료! 콘솔 확인');
+					} catch (error) {
+						console.error('테스트 실행 중 오류:', error);
+						new Notice(`테스트 실패: ${error.message}`);
+					} finally {
+						button.setButtonText('전체 테스트 실행');
+						button.setDisabled(false);
+					}
+				}));
+
+		new Setting(containerEl)
+			.setName('🧪 전체 테스트')
+			.setDesc('모든 BlockStore 기능을 체계적으로 테스트합니다')
+			.addButton(button => button
+				.setButtonText('전체 테스트 실행')
+				.setCta()
+				.onClick(async () => {
+					button.setButtonText('실행 중...');
+					button.setDisabled(true);
+					
+					try {
+						console.clear();
+						await this.plugin.getTestSuite3().runAllTests();
 						new Notice('전체 테스트 완료! 콘솔 확인');
 					} catch (error) {
 						console.error('테스트 실행 중 오류:', error);
