@@ -1,5 +1,5 @@
-import { TestRunner, TestCase } from './TestRunner';
-import { HNSWLibAdapter } from '../utils/hnswAdapter';
+import { TestRunner, TestCase } from './test_runner';
+import { HNSWLibAdapter } from '../utils/hnsw_adapter';
 import { EmbededData } from '../types/structures';
 import { App, normalizePath } from 'obsidian';
 

@@ -1,5 +1,6 @@
 import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
 import { HNSWTestSuite } from '../src/tests/HNSWTestSuite'; // 테스트 스위트만 import
+import { MetadataStoreTestSuite } from './tests/metadataStoreTestSuite';
 
 interface MyPluginSettings {
 	mySetting: string;
@@ -14,12 +15,14 @@ export default class MyPlugin extends Plugin {
 	
 	// 🎯 테스트 스위트만 있으면 됨!
 	private testSuite: HNSWTestSuite;
+	private testSuite2: MetadataStoreTestSuite;
 
 	async onload() {
 		await this.loadSettings();
 		
 		// 🆕 테스트 스위트 초기화
 		this.testSuite = new HNSWTestSuite(this.app);
+		this.testSuite2 = new MetadataStoreTestSuite(this.app);
 
 		// 기존 Obsidian 플러그인 코드들...
 		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
@@ -45,6 +48,7 @@ export default class MyPlugin extends Plugin {
 			callback: async () => {
 				console.clear();
 				await this.testSuite.runAllTests();
+				await this.testSuite2.runAllTests();
 			}
 		});
 
@@ -92,9 +96,12 @@ export default class MyPlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
     
-    // 🎯 테스트 스위트에 접근할 수 있는 getter (필요한 경우)
     getTestSuite(): HNSWTestSuite {
         return this.testSuite;
+    }
+
+	getTestSuite2(): MetadataStoreTestSuite {
+        return this.testSuite2;
     }
 }
 
@@ -145,6 +152,30 @@ class SampleSettingTab extends PluginSettingTab {
 						button.setDisabled(false);
 					}
 				}));
+
+		new Setting(containerEl)
+			.setName('🧪 전체 테스트')
+			.setDesc('모든 MetaDataStore 기능을 체계적으로 테스트합니다')
+			.addButton(button => button
+				.setButtonText('전체 테스트 실행')
+				.setCta()
+				.onClick(async () => {
+					button.setButtonText('실행 중...');
+					button.setDisabled(true);
+					
+					try {
+						console.clear();
+						await this.plugin.getTestSuite2().runAllTests();
+						new Notice('전체 테스트 완료! 콘솔 확인');
+					} catch (error) {
+						console.error('테스트 실행 중 오류:', error);
+						new Notice(`테스트 실패: ${error.message}`);
+					} finally {
+						button.setButtonText('전체 테스트 실행');
+						button.setDisabled(false);
+					}
+				}));
+
 		new Setting(containerEl)
 			.setName('개발자 도구')
 			.setDesc('테스트 결과를 보려면 개발자 도구를 여세요')

@@ -6,17 +6,17 @@ export interface EmbededData {
 // TODO: EmbededData 인터페이스의 key가 blockname을 해싱한 결과인 인터페이스 정의
 
 export interface MetaData {
-    id: number,
-    key: string,
-    filePath: string,
+    id: number,             // key를 해싱한 결과
+    key: string,            // 파일명/헤더명 순
+    filePath: string,       // 파일 경로
 }
 
-export interface SearchResult {
+export interface VectorSearchResult {
     id: number,
     score: number,
 }
-export interface SearchResults {
-    results: SearchResult[],
+export interface VectorSearchResults {
+    results: VectorSearchResult[],
 }
 
 export interface EmbededDatas {
@@ -35,7 +35,7 @@ export interface IVectorDB {
 
     addItems(data: EmbededData[]): Promise<void>;
 
-    search(queryVector: number[], top_k: number): Promise<SearchResults>;
+    search(queryVector: number[], top_k: number): Promise<VectorSearchResults>;
 
     save(): Promise<void>;
 

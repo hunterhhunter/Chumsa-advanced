@@ -1,12 +1,14 @@
-import { HNSWLibAdapter } from "../utils/hnswAdapter";
+import { HNSWLibAdapter } from "../utils/hnsw_adapter";
 import { App, TFile, Notice } from "obsidian";
 import { EmbededData } from "../types/structures";
+import { MetaDataStore } from "src/utils/metadata_store";
 
 export class VectorDB {
     private app: App;
     private index: HNSWLibAdapter;
+    private metadataStore: MetaDataStore;
+    private blockStore: Map<number, number[]>; // 파일별로 가지는 block을 저장하는 저장소
     // TODO:: 파일: blocks 매핑 저장해야함.
-    // HNSWLibAdapter에 있는 key-label, label-key, id-vector 맵 가져오기
     
     constructor(
         app: App,

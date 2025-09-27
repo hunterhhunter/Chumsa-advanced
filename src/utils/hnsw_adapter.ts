@@ -1,4 +1,4 @@
-import { EmbededData, IVectorDB, SearchResult, SearchResults } from '../types/structures';
+import { EmbededData, IVectorDB, VectorSearchResult, VectorSearchResults } from '../types/structures';
 import { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
 import { loadHnswlib, syncFileSystem, HnswlibModule } from 'hnswlib-wasm';
 import { normalizePath, App } from 'obsidian';
@@ -105,24 +105,24 @@ export class HNSWLibAdapter implements IVectorDB {
         for (const each of data) {
             // 벡터 유효성 검사
             if (!each.vector || each.vector.length === 0) {
-                console.warn(`빈 벡터 건너뛰기: ID ${each.id}`);
+                console.warn(`HNSWLibAdapter - 빈 벡터 건너뛰기: ID ${each.id}`);
                 continue;
             }
             
             if (each.vector.length !== this.dimension) {
-                console.warn(`잘못된 벡터 차원: ID ${each.id}, 예상: ${this.dimension}, 실제: ${each.vector.length}`);
+                console.warn(`HNSWLibAdapter - 잘못된 벡터 차원: ID ${each.id}, 예상: ${this.dimension}, 실제: ${each.vector.length}`);
                 continue;
             }
             
             // NaN 또는 undefined 체크
             if (each.vector.some(v => v === undefined || v === null || isNaN(v))) {
-                console.warn(`잘못된 벡터 값: ID ${each.id}`);
+                console.warn(`HNSWLibAdapter - 잘못된 벡터 값: ID ${each.id}`);
                 continue;
             }
             
             // 중복 제거
             if (this.idToVectorMap.has(each.id)) {
-                console.warn(`이미 존재하는 ID 값: ID ${each.id}`);
+                console.warn(`HNSWLibAdapter - 이미 존재하는 ID 값: ID ${each.id}`);
                 continue;
             }
 
@@ -132,19 +132,17 @@ export class HNSWLibAdapter implements IVectorDB {
             this.idToVectorMap.set(each.id, each.vector);
         }
 
-        console.log('ids: %d, vectors: %d', ids.length, vectorsToAdd.length)
-
         if (ids.length === 0) {
-            console.log("추가할 유효한 벡터가 없습니다.");
+            console.log("HNSWLibAdapter - 추가할 유효한 벡터가 없습니다.");
             return;
         }
 
         try {
-            console.log(`${ids.length}개 벡터 추가 시작`);
+            console.log(`HNSWLibAdapter - ${ids.length}개 벡터 추가 시작`);
             await this.hnswIndex.addPoints(vectorsToAdd, ids, false);
-            console.log(`${ids.length}개 벡터 추가 완료`);
+            console.log(`HNSWLibAdapter - ${ids.length}개 벡터 추가 완료`);
         } catch (error) {
-            console.error("HNSW 인덱스 추가 실패:", error);
+            console.error("HNSWLibAdapter - HNSW 인덱스 추가 실패:", error);
             throw error;
         }
     }
@@ -167,16 +165,16 @@ export class HNSWLibAdapter implements IVectorDB {
      * ```
      */
     // DONE: search 재구현
-    async search(queryVector: number[], top_k: number): Promise<SearchResults> {
+    async search(queryVector: number[], top_k: number): Promise<VectorSearchResults> {
         const result = this.hnswIndex.searchKnn(queryVector, top_k, undefined);
 
-        const returnValue: SearchResults = { results: [] };
+        const returnValue: VectorSearchResults = { results: [] };
 
         for (let i = 0; i < result.neighbors.length; i++) {
             const label = result.neighbors[i];
             const score = result.distances[i];
 
-            const eachResult: SearchResult = ({
+            const eachResult: VectorSearchResult = ({
                 id: label,
                 score: 1 - score, 
             });
@@ -195,7 +193,7 @@ export class HNSWLibAdapter implements IVectorDB {
      */
     async removeItem(id: number): Promise<void> {
         if (this.idToVectorMap.get(id) === undefined) {
-            console.warn(`ID ${id}에 해당하는 벡터을 찾을 수 없습니다.`);
+            console.warn(`HNSWLibAdapter - ID ${id}에 해당하는 벡터을 찾을 수 없습니다.`);
             return;
         }
         
@@ -204,9 +202,9 @@ export class HNSWLibAdapter implements IVectorDB {
             this.hnswIndex.markDelete(id);
             this.idToVectorMap.delete(id);
             
-            console.log(`벡터 제거 완료: ID=${id}`);
+            console.log(`HNSWLibAdapter - 벡터 제거 완료: ID=${id}`);
         } catch (error) {
-            console.error(`벡터 제거 실패: ID=${id}`, error);
+            console.error(`HNSWLibAdapter - 벡터 제거 실패: ID=${id}`, error);
             throw error;
         }
     }
@@ -250,9 +248,9 @@ export class HNSWLibAdapter implements IVectorDB {
 		
 		try {
 			await this.app.vault.adapter.write(`${pluginPath}/ID_TO_VECTOR.json`, saveIdToVector);
-			console.log("맵 저장 완료");
+			console.log("HNSWLibAdapter - 맵 저장 완료");
 		} catch (error) {
-			console.error("맵 저장 실패:", error);
+			console.error("HNSWLibAdapter - 맵 저장 실패:", error);
 			throw error;
 		}
     }
@@ -301,7 +299,6 @@ export class HNSWLibAdapter implements IVectorDB {
         const mapPath = normalizePath(`${this.app.vault.configDir}/plugins/Chumsa/ID_TO_VECTOR.json`);
         const isExist = await this.app.vault.adapter.exists(mapPath);
         if (isExist) {
-            console.log("map 존재!")
             await this.app.vault.adapter.remove(mapPath);
         }
     }
