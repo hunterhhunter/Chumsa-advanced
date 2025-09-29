@@ -1,29 +1,35 @@
 import { HNSWLibAdapter } from "../utils/hnsw_adapter";
 import { App, TFile, Notice } from "obsidian";
-import { EmbededData } from "../types/structures";
+import { EmbededData, MdBlocks, MetaData } from "../types/structures";
 import { MetaDataStore } from "src/utils/metadata_store";
+import { BlockStore } from "src/utils/block_store";
 
-export class VectorDB {
+export class MainDataBase {
     private app: App;
     private index: HNSWLibAdapter;
     private metadataStore: MetaDataStore;
-    private blockStore: Map<number, number[]>; // 파일별로 가지는 block을 저장하는 저장소
-    // TODO:: 파일: blocks 매핑 저장해야함.
+    private blockStore: BlockStore;
     
     constructor(
         app: App,
-        index: HNSWLibAdapter,
     ) {
         this.app = app;
-        this.index = index;
+        this.index = new HNSWLibAdapter(this.app);
+        this.metadataStore = new MetaDataStore(this.app);
+        this.blockStore = new BlockStore(this.app);
     }
 
-    async initialize() {
-        await this.index.initialize('embeddings.hnsw', 1536, 50000);
+    async initialize(indexFileName: string, dimensions: number, maxElements: number) {
+        await this.index.initialize(indexFileName, dimensions, maxElements);
+        await this.metadataStore.initialize();
+        await this.blockStore.initialize();
     }
-
-    async insert(item: EmbededData) {
-        // TODO: 파일 - 블럭 매핑 저장 로직 작성
+    // 기본적으로 ID만으로 모든 요소를 찾을 수 있도록 함.
+    async addItem(item: MdBlocks, embeddings: EmbededData[]) {
+        for (let i = 0; i < embeddings.length; i++) {
+            const metadata: MetaData = {id: item.blocks.at(i)!!.id, key: item.blocks.at(i)!!.key, filePath: item.filePath, fileName: item.fileName };
+            
+        }
     }
 
 

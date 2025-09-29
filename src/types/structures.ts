@@ -3,18 +3,18 @@ export interface EmbededData {
     vector: number[],           // text를 임베딩한 결과
 }
 
-// TODO: EmbededData 인터페이스의 key가 blockname을 해싱한 결과인 인터페이스 정의
-
 export interface MetaData {
     id: number,             // key를 해싱한 결과
     key: string,            // 파일명/헤더명 순
-    filePath: string,       // 파일 경로
+    filePath: string,
+    fileName: string,
 }
 
 export interface VectorSearchResult {
     id: number,             // hnsw에 저장된 id(key를 해싱한 결과)
     score: number,          // 유사도 점수
 }
+
 export interface VectorSearchResults {
     results: VectorSearchResult[],
 }
@@ -34,7 +34,8 @@ export interface MdHeaddingBlock { // MdBlock ->
     text: string,           // 내용
 }
 
-export interface MdBlock { // MdBlocks => {fileName: [{id, key, text}, ..]}
+export interface MdBlocks { // MdBlocks => {fileName: [{id, key, text}, ..]}
+    filePath: string,
     fileName: string,
     blocks: MdHeaddingBlock[]
 }

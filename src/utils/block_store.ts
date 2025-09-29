@@ -1,9 +1,10 @@
 import { App, normalizePath } from "obsidian";
-import { MdBlock, MdHeaddingBlock } from "src/types/structures";
+import { MdBlocks, MdHeaddingBlock } from "src/types/structures";
 
+// ID -> MdHeaddingBlock 저장소
 export class BlockStore {
     private app: App;
-    private store: Map<string, MdBlock> = new Map(); // "fileName" -> "[hash(Metadata.key), ..]"
+    private store: Map<number, MdHeaddingBlock> = new Map(); // "id" -> "[hash(Metadata.key), ..]"
 
     constructor(app: App) {
         this.app = app
@@ -23,45 +24,49 @@ export class BlockStore {
         }
     }
 
-    public addItems(data: MdBlock[]): void {
+    public addItems(data: MdBlocks[]): void {
         for (const each of data) {
             if ( each.fileName === "" ) {
-                console.log(`FileBlockStore - 파일 이름이 비어있음`);
+                console.log(`BlockStore - 파일 이름이 비어있음`);
                 continue;
             }
 
             if ( each.blocks.length === 0 ) {
-                console.log(`FileBlockStore - 추가할 블럭이 존재하지 않음 fileName: ${each.fileName}`);
+                console.log(`BlockStore - 추가할 블럭이 존재하지 않음 fileName: ${each.fileName}`);
                 continue;
             }
-            this.store.set(each.fileName, each);
+            for (const block of each.blocks) {
+                if ( !block.id  || block.key === "" || block.text === "") {
+                    console.log(`BlockStore`)
+                }
+            }
         }
     }
 
-    public deleteItem(fileName: string): void {
+    public deleteItem(id: number): void {
         // TODO: 에러 스로잉으로 변경
 
-        const exist = this.store.has(fileName);
+        const exist = this.store.has(id);
         if ( !exist ) {
-            console.log(`FileBlockStore - 삭제하려는 file이 존재하지 않음 fileName: ${fileName}`);
+            console.log(`BlockStore - 삭제하려는 file이 존재하지 않음 ID: ${id}`);
             return;
         } else {
-            this.store.delete(fileName);
+            this.store.delete(id);
         }
     }
 
-    public updateItem(fileName: string, data: MdBlock): void {
-        this.deleteItem(fileName);
+    public updateItem(id: number, data: MdBlocks): void {
+        this.deleteItem(id);
         this.addItems([data]);
     }
 
-    public search(fileName: string): MdBlock | void {
-        const exist = this.store.has(fileName);
+    public search(id: number): MdHeaddingBlock | void {
+        const exist = this.store.has(id);
         if ( !exist ) {
-            console.log(`FileBlockStore - 검색하려는 file이 존재하지 않음 fileName: ${fileName}`);
+            console.log(`BlockStore - 검색하려는 file이 존재하지 않음 id: ${id}`);
             return;
         } else {
-            const result = this.store.get(fileName);
+            const result = this.store.get(id);
             return result;
         }
     }
@@ -92,7 +97,7 @@ export class BlockStore {
                 const mapObj = JSON.parse(stringifiedMap);
 
                 this.store = new Map(
-                    Object.entries(mapObj).map(([key, value]) => [String(key), value as MdBlock])
+                    Object.entries(mapObj).map(([key, value]) => [Number(key), value as MdHeaddingBlock])
                 );
             }
         } catch (error) {

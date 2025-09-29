@@ -4,6 +4,7 @@ import { normalize } from 'path';
 
 export class MetaDataStore {
     private app: App;
+    // TODO: 메타데이터에 filePath, fileName을 보관할 때 이 내용이 중복되지 않게 저장하기 위한 방법 구상 및 구현
     private store: Map<number, MetaData> = new Map();
 
     // DONE: Constructor 작성
@@ -30,12 +31,7 @@ export class MetaDataStore {
     public addItems(data: MetaData[]): void {
         // TODO: 에러 처리(지금은 pass - pass한 문서 따로 정리해서 남겨두기?) 로직 정리
         for (const each of data) {
-            // 메타데이터 검증
-            if ( each.filePath === "" ) {
-                console.warn(`MetaDataStore - 파일 경로 비어있음 ID: ${each.filePath}`);
-                continue;
-            }
-            
+            // 메타데이터 검증            
             if ( !each.id ) {
                 console.warn(`MetaDataStore - ID 비어있음`);
                 continue;
