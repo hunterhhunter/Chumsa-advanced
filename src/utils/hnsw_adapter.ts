@@ -111,7 +111,7 @@ export class HNSWLibAdapter implements IVectorDB {
         return returnValue;
     }
 
-    async removeItem(id: number): Promise<void> {
+    async deleteItem(id: number): Promise<void> {
         if (this.idToVectorMap.get(id) === undefined) {
             console.warn(`HNSWLibAdapter - ID ${id}에 해당하는 벡터을 찾을 수 없습니다.`);
             return;

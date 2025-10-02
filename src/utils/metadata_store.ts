@@ -75,17 +75,17 @@ export class MetaDataStore {
         }
     }
 
-    public search(id: number): MetaData | Error {
+    public search(id: number): MetaData {
         // ID에 해당하는 데이터가 없는 경우 에러 스로잉(이벤트) 처리하기 or 무시 후 리턴 결정
         if ( !this.store.has(id) ) {
             console.warn(`MetaDataStore - ID에 해당하는 데이터가 존재하지 않음 ID: ${id}`);
-            return new Error(`MetaDataStore - ID에 해당하는 데이터가 존재하지 않음 ID: ${id}`);
+            throw new Error(`MetaDataStore - ID에 해당하는 데이터가 존재하지 않음 ID: ${id}`);
         } else {
             const result = this.store.get(id);
 
             if (!result) { 
                 console.warn(`MetaDataStore - ID에 해당하는 데이터가 존재하지 않음 ID: ${id}`);
-                return new Error(`MetaDataStore - ID에 해당하는 데이터가 존재하지 않음 ID: ${id}`);
+                throw new Error(`MetaDataStore - ID에 해당하는 데이터가 존재하지 않음 ID: ${id}`);
             }
             return result;
         }

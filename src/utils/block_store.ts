@@ -4,11 +4,10 @@ import { MdBlocks, MdHeaddingBlock } from "src/types/structures";
 // ID -> MdHeaddingBlock 저장소
 export class BlockStore {
     private app: App;
-    private store: Map<number, MdHeaddingBlock> = new Map(); // "id" -> "[hash(Metadata.key), ..]"
-
+    private headdingBlockstore: Map<number, MdHeaddingBlock> = new Map(); // "id" -> "[hash(Metadata.key), ..]"
+    // TODO: filePath -> 해싱된 헤더키 보유 리스트 즉. 파일별로 어떤 헤더블럭을 가지고 있는지 알 수 있는 Map을 만들어야함.
     constructor(app: App) {
         this.app = app
-        
     }
 
     public async initialize() {
@@ -20,53 +19,49 @@ export class BlockStore {
         if ( exist ) {
             await this.loadMaps();
         } else { 
-            this.store = new Map();
+            this.headdingBlockstore = new Map();
         }
     }
 
-    public addItems(data: MdBlocks[]): void {
+    public addItems(data: MdHeaddingBlock[]): void {
         for (const each of data) {
-            if ( each.fileName === "" ) {
-                console.log(`BlockStore - 파일 이름이 비어있음`);
+            if ( each.key.length === 0 ) {
+                console.log(`BlockStore - Key가 비어있음 ID: ${each.id}`);
                 continue;
             }
 
-            if ( each.blocks.length === 0 ) {
-                console.log(`BlockStore - 추가할 블럭이 존재하지 않음 fileName: ${each.fileName}`);
+            if ( each.text.length === 0 ) {
+                console.log(`BlockStore - 내용이 비어있음 ID: ${each.id}`);
                 continue;
             }
-            for (const block of each.blocks) {
-                if ( !block.id  || block.key === "" || block.text === "") {
-                    console.log(`BlockStore`)
-                }
-            }
+            this.headdingBlockstore.set(each.id, each);
         }
     }
 
     public deleteItem(id: number): void {
         // TODO: 에러 스로잉으로 변경
 
-        const exist = this.store.has(id);
+        const exist = this.headdingBlockstore.has(id);
         if ( !exist ) {
             console.log(`BlockStore - 삭제하려는 file이 존재하지 않음 ID: ${id}`);
             return;
         } else {
-            this.store.delete(id);
+            this.headdingBlockstore.delete(id);
         }
     }
 
-    public updateItem(id: number, data: MdBlocks): void {
+    public updateItem(id: number, data: MdHeaddingBlock): void {
         this.deleteItem(id);
         this.addItems([data]);
     }
 
-    public search(id: number): MdHeaddingBlock | void {
-        const exist = this.store.has(id);
+    public search(id: number): MdHeaddingBlock {
+        const exist = this.headdingBlockstore.has(id);
         if ( !exist ) {
             console.log(`BlockStore - 검색하려는 file이 존재하지 않음 id: ${id}`);
-            return;
+            throw new Error(`NotFoundError - BlockStore ID: ${id}`)
         } else {
-            const result = this.store.get(id);
+            const result = this.headdingBlockstore.get(id)!;
             return result;
         }
     }
@@ -75,7 +70,7 @@ export class BlockStore {
         const mapPath = normalizePath(`${this.app.vault.configDir}/plugins/Chumsa/BLOCK_MAP.json`);
         
         try {
-            const stringfiedMap = JSON.stringify(Object.fromEntries(this.store), null, 2);
+            const stringfiedMap = JSON.stringify(Object.fromEntries(this.headdingBlockstore), null, 2);
 
             await this.app.vault.adapter.write(`${mapPath}`, stringfiedMap);
         } catch (error) {
@@ -90,13 +85,13 @@ export class BlockStore {
             const exist = await this.app.vault.adapter.exists(mapPath);
 
             if ( !exist ) {
-                this.store = new Map();
+                this.headdingBlockstore = new Map();
             } else {
                 const stringifiedMap = await this.app.vault.adapter.read(mapPath);
 
                 const mapObj = JSON.parse(stringifiedMap);
 
-                this.store = new Map(
+                this.headdingBlockstore = new Map(
                     Object.entries(mapObj).map(([key, value]) => [Number(key), value as MdHeaddingBlock])
                 );
             }
@@ -107,16 +102,16 @@ export class BlockStore {
     }
 
     public count() {
-        return this.store.size;
+        return this.headdingBlockstore.size;
     }
 
     public async resetStore() {
-        this.store.clear();
+        this.headdingBlockstore.clear();
         const mapPath = normalizePath(`${this.app.vault.configDir}/plugins/Chumsa/BLOCK_MAP.json`);
         await this.app.vault.adapter.remove(mapPath);
     }
 
     public clearMap() {
-        this.store.clear();
+        this.headdingBlockstore.clear();
     }
 }

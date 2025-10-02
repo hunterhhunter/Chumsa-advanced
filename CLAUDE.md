@@ -17,26 +17,29 @@ Important: The build outputs directly to vault plugin folder via OBSIDIAN_PLUGIN
 This is an Obsidian plugin implementing a vector database using HNSW (Hierarchical Navigable Small World) algorithm. Key components:
 
 ### Core Architecture
-- **HNSWLibAdapter** (`src/utils/hnswAdapter.ts`): Vector database adapter implementing cosine similarity search using hnswlib-wasm
-- **VectorDB Service** (`src/services/vectorDB.ts`): Service layer for vector operations
+- **HNSWLibAdapter** (`src/utils/hnsw_adapter.ts`): Vector database adapter implementing cosine similarity search using hnswlib-wasm
+- **MainDataBase** (`src/services/vectorDB.ts`): Service layer orchestrating vector operations with HNSWLibAdapter, MetaDataStore, and BlockStore
+- **MetaDataStore** (`src/utils/metadata_store.ts`): Manages metadata for stored vectors with persistent JSON storage
+- **BlockStore** (`src/utils/block_store.ts`): Manages markdown block content linked to vector IDs
 - **Plugin Entry** (`src/main.ts`): Obsidian plugin lifecycle with test suite integration
 
 ### Vector Search System
-- Uses 3-dimensional vectors (configurable) for testing, typically 1536 dimensions for production embeddings
-- Implements persistent storage via JSON mapping files (ID_TO_VECTOR.json)
+- Uses 3-dimensional vectors for testing, typically 1536 dimensions for production embeddings
+- Implements persistent storage via JSON mapping files (ID_TO_VECTOR.json, METADATA_MAP.json)
 - HNSW index files (*.hnsw) stored in vault's plugin folder
 - Cosine similarity metric for vector comparisons
 
-### Key Interfaces
+### Key Interfaces (`src/types/structures.ts`)
 - `IVectorDB`: Standard interface for vector database operations
 - `EmbededData`: Vector data structure with id and vector array
-- `MetaData`: Metadata for stored vectors (id, key, filePath)
-- `SearchResults`: Search results with scores
+- `MetaData`: Metadata for stored vectors (id, key, filePath, fileName)
+- `VectorSearchResult`: Search results with scores
 
 ### Testing Framework
-- Custom test runner (`src/tests/TestRunner.ts`) with timeout support
-- HNSWTestSuite (`src/tests/HNSWTestSuite.ts`) validates adapter functionality
-- Test commands accessible via Obsidian command palette
+- Custom test runner (`src/tests/test_runner.ts`) with timeout support
+- HNSWTestSuite (`src/tests/HNSW_test_suite.ts`) validates adapter functionality
+- MetadataStoreTestSuite and BlockStoreTestSuite for component testing
+- Test commands accessible via Obsidian command palette or settings tab
 
 ## Development Notes
 
@@ -45,3 +48,6 @@ This is an Obsidian plugin implementing a vector database using HNSW (Hierarchic
 - Requires .env file with OBSIDIAN_PLUGIN_PATH for development
 - Vector validation includes dimension checks and NaN detection
 - Test suite accessible through plugin commands or settings tab
+
+## important rules
+- always answer in Korean

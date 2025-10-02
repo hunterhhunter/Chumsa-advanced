@@ -26,7 +26,7 @@ export interface EmbededDatas {
 export interface EmbedResult {
     vec: number[],          // text를 임베딩한 결과
     tokens: number,         // 토큰 수
-} 
+}
 
 export interface MdHeaddingBlock { // MdBlock -> 
     id: number,             // key를 해싱한 결과
@@ -38,6 +38,13 @@ export interface MdBlocks { // MdBlocks => {fileName: [{id, key, text}, ..]}
     filePath: string,
     fileName: string,
     blocks: MdHeaddingBlock[]
+}
+
+export interface MainDataBaseSearchResult {
+    id: number,
+    score: number,
+    metadata: MetaData,
+    block: MdHeaddingBlock
 }
 
 export interface IVectorDB {
