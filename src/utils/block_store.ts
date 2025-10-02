@@ -4,26 +4,20 @@ import { MdBlocks, MdHeaddingBlock } from "src/types/structures";
 // ID -> MdHeaddingBlock 저장소
 export class BlockStore {
     private app: App;
-    private headdingBlockstore: Map<number, MdHeaddingBlock> = new Map(); // "id" -> "[hash(Metadata.key), ..]"
-    // TODO: filePath -> 해싱된 헤더키 보유 리스트 즉. 파일별로 어떤 헤더블럭을 가지고 있는지 알 수 있는 Map을 만들어야함.
+    private headdingBlockstore: Map<number, MdHeaddingBlock> = new Map(); // "id" -> "MdHeaddingBlock"
+    private fileBlocksMap: Map<string, number[]> = new Map(); // "filePath" -> [id1, id2, ...]
+
     constructor(app: App) {
         this.app = app
     }
 
     public async initialize() {
-        // 메타데이터 맵.json 경로
-        const mapPath = normalizePath(`${this.app.vault.configDir}/plugins/Chumsa/BLOCK_MAP.json`);
-        // JSON 파일 존재 확인
-        const exist = await this.app.vault.adapter.exists(mapPath);
-        // 존재할시 불러오기
-        if ( exist ) {
-            await this.loadMaps();
-        } else { 
-            this.headdingBlockstore = new Map();
-        }
+        await this.loadMaps();
     }
 
-    public addItems(data: MdHeaddingBlock[]): void {
+    public addItems(data: MdHeaddingBlock[], filePath?: string): void {
+        const blockIds: number[] = [];
+
         for (const each of data) {
             if ( each.key.length === 0 ) {
                 console.log(`BlockStore - Key가 비어있음 ID: ${each.id}`);
@@ -34,7 +28,17 @@ export class BlockStore {
                 console.log(`BlockStore - 내용이 비어있음 ID: ${each.id}`);
                 continue;
             }
+
             this.headdingBlockstore.set(each.id, each);
+            blockIds.push(each.id);
+        }
+
+        // filePath가 제공된 경우 fileBlocksMap 업데이트
+        if ( filePath && blockIds.length > 0 ) {
+            const existingIds = this.fileBlocksMap.get(filePath) || [];
+            // 기존 ID와 새 ID를 합치고 중복 제거
+            const mergedIds = Array.from(new Set([...existingIds, ...blockIds]));
+            this.fileBlocksMap.set(filePath, mergedIds);
         }
     }
 
@@ -45,8 +49,21 @@ export class BlockStore {
         if ( !exist ) {
             console.log(`BlockStore - 삭제하려는 file이 존재하지 않음 ID: ${id}`);
             return;
-        } else {
-            this.headdingBlockstore.delete(id);
+        }
+
+        // headdingBlockstore에서 삭제
+        this.headdingBlockstore.delete(id);
+
+        // fileBlocksMap에서도 해당 ID 제거
+        for (const [filePath, ids] of this.fileBlocksMap.entries()) {
+            const filteredIds = ids.filter(blockId => blockId !== id);
+            if (filteredIds.length === 0) {
+                // 파일에 블럭이 하나도 없으면 파일 엔트리도 삭제
+                this.fileBlocksMap.delete(filePath);
+            } else if (filteredIds.length !== ids.length) {
+                // ID가 제거되었으면 업데이트
+                this.fileBlocksMap.set(filePath, filteredIds);
+            }
         }
     }
 
@@ -67,37 +84,54 @@ export class BlockStore {
     }
 
     public async saveMaps(): Promise<void> {
-        const mapPath = normalizePath(`${this.app.vault.configDir}/plugins/Chumsa/BLOCK_MAP.json`);
-        
-        try {
-            const stringfiedMap = JSON.stringify(Object.fromEntries(this.headdingBlockstore), null, 2);
+        const blockMapPath = normalizePath(`${this.app.vault.configDir}/plugins/Chumsa/BLOCK_MAP.json`);
+        const fileBlocksMapPath = normalizePath(`${this.app.vault.configDir}/plugins/Chumsa/FILE_BLOCKS_MAP.json`);
 
-            await this.app.vault.adapter.write(`${mapPath}`, stringfiedMap);
+        try {
+            // headdingBlockstore 저장
+            const stringfiedMap = JSON.stringify(Object.fromEntries(this.headdingBlockstore), null, 2);
+            await this.app.vault.adapter.write(blockMapPath, stringfiedMap);
+
+            // fileBlocksMap 저장
+            const stringifiedFileBlocksMap = JSON.stringify(Object.fromEntries(this.fileBlocksMap), null, 2);
+            await this.app.vault.adapter.write(fileBlocksMapPath, stringifiedFileBlocksMap);
         } catch (error) {
             // TODO: 에러 스로잉(이벤트) 처리
-            console.warn(`MetaDataStore - 맵 저장 중 에러 발생 Error: ${error}`);
+            console.warn(`BlockStore - 맵 저장 중 에러 발생 Error: ${error}`);
         }
     }
 
     public async loadMaps(): Promise<void> {
-        const mapPath = normalizePath(`${this.app.vault.configDir}/plugins/Chumsa/BLOCK_MAP.json`);
-        try {
-            const exist = await this.app.vault.adapter.exists(mapPath);
+        const blockMapPath = normalizePath(`${this.app.vault.configDir}/plugins/Chumsa/BLOCK_MAP.json`);
+        const fileBlocksMapPath = normalizePath(`${this.app.vault.configDir}/plugins/Chumsa/FILE_BLOCKS_MAP.json`);
 
-            if ( !exist ) {
+        try {
+            // headdingBlockstore 로드
+            const blockMapExist = await this.app.vault.adapter.exists(blockMapPath);
+            if ( !blockMapExist ) {
                 this.headdingBlockstore = new Map();
             } else {
-                const stringifiedMap = await this.app.vault.adapter.read(mapPath);
-
+                const stringifiedMap = await this.app.vault.adapter.read(blockMapPath);
                 const mapObj = JSON.parse(stringifiedMap);
-
                 this.headdingBlockstore = new Map(
                     Object.entries(mapObj).map(([key, value]) => [Number(key), value as MdHeaddingBlock])
                 );
             }
+
+            // fileBlocksMap 로드
+            const fileBlocksMapExist = await this.app.vault.adapter.exists(fileBlocksMapPath);
+            if ( !fileBlocksMapExist ) {
+                this.fileBlocksMap = new Map();
+            } else {
+                const stringifiedFileBlocksMap = await this.app.vault.adapter.read(fileBlocksMapPath);
+                const fileBlocksMapObj = JSON.parse(stringifiedFileBlocksMap);
+                this.fileBlocksMap = new Map(
+                    Object.entries(fileBlocksMapObj).map(([key, value]) => [key, value as number[]])
+                );
+            }
         } catch (error) {
             // TODO: 에러 스로잉(이벤트) 처리하기
-            console.warn(`MetaDataStore - 맵 로드 중 에러 발생 Error: ${error}`);
+            console.warn(`BlockStore - 맵 로드 중 에러 발생 Error: ${error}`);
         }
     }
 
@@ -107,11 +141,62 @@ export class BlockStore {
 
     public async resetStore() {
         this.headdingBlockstore.clear();
-        const mapPath = normalizePath(`${this.app.vault.configDir}/plugins/Chumsa/BLOCK_MAP.json`);
-        await this.app.vault.adapter.remove(mapPath);
+        this.fileBlocksMap.clear();
+
+        const blockMapPath = normalizePath(`${this.app.vault.configDir}/plugins/Chumsa/BLOCK_MAP.json`);
+        const fileBlocksMapPath = normalizePath(`${this.app.vault.configDir}/plugins/Chumsa/FILE_BLOCKS_MAP.json`);
+
+        await this.app.vault.adapter.remove(blockMapPath);
+        await this.app.vault.adapter.remove(fileBlocksMapPath);
     }
 
     public clearMap() {
         this.headdingBlockstore.clear();
+        this.fileBlocksMap.clear();
+    }
+
+    // 파일별 블럭 ID 조회 메서드들
+
+    /**
+     * 특정 파일이 가지고 있는 모든 블럭 ID 리스트 반환
+     */
+    public getFileBlockIds(filePath: string): number[] {
+        return this.fileBlocksMap.get(filePath) || [];
+    }
+
+    /**
+     * 특정 파일의 모든 블럭 삭제
+     */
+    public deleteFileBlocks(filePath: string): void {
+        const blockIds = this.getFileBlockIds(filePath);
+        for (const id of blockIds) {
+            this.headdingBlockstore.delete(id);
+        }
+        this.fileBlocksMap.delete(filePath);
+    }
+
+    /**
+     * 파일 경로 변경 시 fileBlocksMap 업데이트
+     */
+    public renameFilePath(oldPath: string, newPath: string): void {
+        const blockIds = this.fileBlocksMap.get(oldPath);
+        if (blockIds) {
+            this.fileBlocksMap.delete(oldPath);
+            this.fileBlocksMap.set(newPath, blockIds);
+        }
+    }
+
+    /**
+     * 모든 파일 경로 목록 반환
+     */
+    public getAllFilePaths(): string[] {
+        return Array.from(this.fileBlocksMap.keys());
+    }
+
+    /**
+     * 특정 파일이 블럭을 가지고 있는지 확인
+     */
+    public hasFile(filePath: string): boolean {
+        return this.fileBlocksMap.has(filePath);
     }
 }

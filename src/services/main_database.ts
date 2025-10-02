@@ -35,10 +35,10 @@ export class MainDataBase {
             const metadata: MetaData = {id: item.blocks.at(i)!.id, key: item.blocks.at(i)!.key, filePath: item.filePath, fileName: item.fileName };
             const vectorData: EmbededData = { id: embeddings.at(i)!.id, vector: embeddings.at(i)!.vector }
             const block = item.blocks.at(i);
-            
+
             this.metadataStore.addItems([metadata]);
-            this.index.addItems([vectorData]);
-            this.blockStore.addItems([block!]);
+            await this.index.addItems([vectorData]);
+            this.blockStore.addItems([block!], item.filePath);
         }
     }
 
@@ -79,6 +79,44 @@ export class MainDataBase {
         await this.blockStore.saveMaps();
     }
 
-    
+    // 파일 변경 감지를 위한 메서드들
+
+    /**
+     * 특정 파일이 가지고 있는 모든 블럭 ID 리스트 반환
+     */
+    public getFileBlockIds(filePath: string): number[] {
+        return this.blockStore.getFileBlockIds(filePath);
+    }
+
+    /**
+     * 특정 파일의 모든 데이터 삭제 (벡터, 메타데이터, 블럭)
+     */
+    public async deleteFileBlocks(filePath: string): Promise<void> {
+        const blockIds = this.blockStore.getFileBlockIds(filePath);
+        for (const id of blockIds) {
+            await this.deleteItem(id);
+        }
+    }
+
+    /**
+     * 파일 경로 변경 시 호출 (rename/move)
+     */
+    public renameFilePath(oldPath: string, newPath: string): void {
+        this.blockStore.renameFilePath(oldPath, newPath);
+    }
+
+    /**
+     * 특정 파일이 DB에 존재하는지 확인
+     */
+    public hasFile(filePath: string): boolean {
+        return this.blockStore.hasFile(filePath);
+    }
+
+    /**
+     * DB에 저장된 모든 파일 경로 목록 반환
+     */
+    public getAllFilePaths(): string[] {
+        return this.blockStore.getAllFilePaths();
+    }
 
 }
