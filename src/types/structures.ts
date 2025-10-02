@@ -1,75 +1,63 @@
 export interface EmbededData {
-	key: string,
-	text: string,
-    vector: number[],
-    filePath: string
+    id: number,                 // key를 해싱한 결과
+    vector: number[],           // text를 임베딩한 결과
 }
 
 export interface MetaData {
-    key: string,
-    text: string,
+    id: number,             // key를 해싱한 결과
+    key: string,            // 파일명/헤더명 순
     filePath: string,
+    fileName: string,
 }
 
-export interface VectorData {
-	id: number,
-    vector: number[],
-    metadata: MetaData,
+export interface VectorSearchResult {
+    id: number,             // hnsw에 저장된 id(key를 해싱한 결과)
+    score: number,          // 유사도 점수
 }
 
-export interface SearchResult {
-    id: number,
-    score: number,
-    metadata: MetaData,
+export interface VectorSearchResults {
+    results: VectorSearchResult[],
 }
 
 export interface EmbededDatas {
-    data: EmbededData,
+    data: EmbededData[],
 }
 
 export interface EmbedResult {
-    vec: number[],
-    tokens: number,
-} 
+    vec: number[],          // text를 임베딩한 결과
+    tokens: number,         // 토큰 수
+}
+
+export interface MdHeaddingBlock { // MdBlock -> 
+    id: number,             // key를 해싱한 결과
+    key: string,            // 파일명/헤더명 순
+    text: string,           // 내용
+}
+
+export interface MdBlocks { // MdBlocks => {fileName: [{id, key, text}, ..]}
+    filePath: string,
+    fileName: string,
+    blocks: MdHeaddingBlock[]
+}
+
+export interface MainDataBaseSearchResult {
+    id: number,
+    score: number,
+    metadata: MetaData,
+    block: MdHeaddingBlock
+}
 
 export interface IVectorDB {
     loadMaps(): Promise<void>;
 
     initialize(indexFilePath: string, dimensions: number, maxElements: number): Promise<boolean>;
 
-    addItem(data: VectorData[]): Promise<void>;
+    addItems(data: EmbededData[]): Promise<void>;
 
-    search(queryVector: number[], top_k: number): Promise<SearchResult[]>;
+    search(queryVector: number[], top_k: number): Promise<VectorSearchResults>;
 
     save(): Promise<void>;
 
     count(): Promise<number>;
 }
 
-/**
- * 테스트를 위한 VectorData 배열을 생성합니다.
- * @param count - 생성할 데이터의 개수
- * @param dimensions - 각 벡터의 차원 수 (기본값: 1536)
- * @returns {VectorData[]} 생성된 목 데이터 배열
- */
-export function createMockData(count: number, dimensions = 1536): VectorData[] {
-    const mockData: VectorData[] = [];
-
-    for (let i = 0; i < count; i++) {
-        // 1536차원의 무작위 벡터 생성
-        const randomVector = Array.from({ length: dimensions }, () => Math.random());
-
-        const data: VectorData = {
-            id: i + 1, // 1, 2, 3, ...
-            vector: randomVector,
-            metadata: {
-                key: `#Heading ${i + 1}`,
-                text: `이것은 ${i + 1}번째 블록의 목 데이터 텍스트입니다.`,
-                filePath: `mock/file-${i + 1}.md`
-            }
-        };
-        mockData.push(data);
-    }
-
-    return mockData;
-}
