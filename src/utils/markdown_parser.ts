@@ -56,12 +56,12 @@ import { hashString } from "./hash_func";
 export function parseMarkdownByHeadings (filePath: string, fileName: string, markdown: string, spliter: string) {
     // 헤더를 분할을 위한 고유 분할자로 변경
     const headingMap: Record<string, string> = {
-        "######": "__MARKDOWN_HEADING_6__",
-        "#####": "__MARKDOWN_HEADING_5__",
-        "####": "__MARKDOWN_HEADING_4__",
-        "###": "__MARKDOWN_HEADING_3__",
-        "##": "__MARKDOWN_HEADING_2__",
-        "#": "__MARKDOWN_HEADING_1__",
+        "###### ": "__MARKDOWN_HEADING_6__",
+        "##### ": "__MARKDOWN_HEADING_5__",
+        "#### ": "__MARKDOWN_HEADING_4__",
+        "### ": "__MARKDOWN_HEADING_3__",
+        "## ": "__MARKDOWN_HEADING_2__",
+        "# ": "__MARKDOWN_HEADING_1__",
     }
 
     // 분할자 대체를 위한 문자열 선언
@@ -91,8 +91,9 @@ export function parseMarkdownByHeadings (filePath: string, fileName: string, mar
             const keyText = line.replace(newSpliter, "").trim();
             splitPoints.push({
                 index: index,
-                key: `${keyText}_${fileName}`
+                key: `${keyText} of ${fileName}`
             });
+            console.log(`나찾아봐라-------${keyText} of ${fileName}`)
         }
     });
 

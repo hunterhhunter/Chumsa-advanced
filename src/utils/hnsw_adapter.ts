@@ -12,6 +12,7 @@ export class HNSWLibAdapter implements IVectorDB {
     private indexFileName: string;
     private dimension: number;
     private idToVectorMap: Map<number, number[]> = new Map();
+    private saveQueue: Promise<void> = Promise.resolve();
 
     public constructor(app: App) {
         this.app = app;
@@ -130,8 +131,19 @@ export class HNSWLibAdapter implements IVectorDB {
     }
 
     async save(): Promise<void> {
-        await this.hnswIndex.writeIndex(this.indexFileName);
-        await this.saveMaps();
+        // 저장 작업을 큐에 추가하여 순차적으로 실행
+        this.saveQueue = this.saveQueue.then(async () => {
+            try {
+                await this.hnswIndex.writeIndex(this.indexFileName);
+                await syncFileSystem('write');
+                await this.saveMaps();
+            } catch (error) {
+                console.error("HNSWLibAdapter - 저장 실패:", error);
+                throw error;
+            }
+        });
+
+        return this.saveQueue;
     }
 
     async saveMaps(): Promise<void> {
@@ -187,7 +199,11 @@ export class HNSWLibAdapter implements IVectorDB {
     }
 
 
-    getIdToVectorMap() {
+    public getIdToVectorMap() {
         return this.idToVectorMap;
+    }
+
+    public getVectorById(id: number) {
+        return this.idToVectorMap.get(id);
     }
 }
