@@ -1,17 +1,20 @@
 import * as dotenv from 'dotenv';
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, setIcon, Setting, TFile } from 'obsidian';
 import { DocumentService } from './services/document_service';
+import { SearchView, SEARCH_VIEW_TYPE } from './views/search_view';
 dotenv.config();
 
 
 interface MyPluginSettings {
 	mySetting: string;
 	OPENAI_API_KEY: string;
+	spliter: string;
 }
 
 const DEFAULT_SETTINGS: MyPluginSettings = {
 	mySetting: 'default',
-	OPENAI_API_KEY: ""
+	OPENAI_API_KEY: "",
+	spliter: "### ",
 }
 
 export default class MyPlugin extends Plugin {
@@ -37,39 +40,63 @@ export default class MyPlugin extends Plugin {
 				new SampleModal(this.app).open();
 			}
 		});
-		
-		// 🧪 테스트 실행 명령어들
-		this.addCommand({
-			id: 'run-hnsw-test-suite',
-			name: 'Run HNSW Test Suite (All)',
-			callback: async () => {
-				console.clear();
-			}
-		});
 
-		this.addCommand({
-			id: 'sample-editor-command',
-			name: 'Sample editor command',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				console.log(editor.getSelection());
-				editor.replaceSelection('Sample Editor Command');
-			}
-		});
+		// SEARCH_VIEW를 등록
+		this.registerView(SEARCH_VIEW_TYPE, (leaf) => new SearchView(leaf));
+		// SEARCH_VIEW를 열기 위한 리본아이콘 등록
+		this.addRibbonIcon(
+			"brain-circuit", "첨사: 검색 뷰 열기", () => this.activateSearchView()
+		);
 
-		this.addCommand({
-			id: 'open-sample-modal-complex',
-			name: 'Open sample modal (complex)',
-			checkCallback: (checking: boolean) => {
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-					return true;
+		this.registerMarkdownPostProcessor((element, context) => {
+			// 랜더링된 요소 내에서 h3 헤딩 태그 찾기
+			const headings = element.querySelectorAll("h3");
+			
+			headings.forEach(headings => {
+				if (headings.querySelector(".search-icon")) {
+					return;
 				}
-			}
+
+				const iconEl = headings.createEl('span', {
+					cls: 'search-icon',				   // css 스타일링을 위한 클래스
+					attr: {
+						'aria-label': "관련 자료 검색", // 마우스 호버링시 나올 툴팁
+						
+					}
+				});
+
+				setIcon(iconEl, 'link');
+
+				// 아이콘 클릭시 실행할 이벤트 등록
+				iconEl.addEventListener('click', async (event) => {
+					this.activateSearchView();
+					// 정확한 키 생성을 위한 작업
+					const clickLineIndex = context.getSectionInfo(headings as HTMLElement)!.lineStart;
+					const clickLineText = context.getSectionInfo(headings as HTMLElement)?.text.split('\n')[clickLineIndex];
+					if (!clickLineText) return;
+
+					console.log(`---------------${context.getSectionInfo(headings as HTMLElement)?.lineStart}`);
+
+					const sourcePath = context.sourcePath;
+					const file = this.app.vault.getAbstractFileByPath(sourcePath);
+
+					let fileName = ""
+					if (!file) {
+						fileName = sourcePath.split('\n').pop()!;
+					} else {
+						fileName = file.name;
+					}
+
+					// 1009: 현재 유사도 검색한 결고 콘솔에 띄우기까지 완료
+					const ad = await this.documentService?.searchSimilarBlocks(fileName, clickLineText, this.settings.spliter)!;
+					for (const each of ad) {
+						console.log(`ID: ${each.id}, Score: ${each.score}, Text: ${each.block.text}`)
+					}
+				});
+			})
 		});
 
+		// TODO: 세팅 탭 다른 파일로 분리 + spliter 설정가능하게
 		this.addSettingTab(new SampleSettingTab(this.app, this));
 
 		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
@@ -87,7 +114,8 @@ export default class MyPlugin extends Plugin {
 		}
 
 		try {
-			this.documentService = new DocumentService(this.app, this.settings.OPENAI_API_KEY);
+			// TODO: indexFileName은 인덱스 초기화마다 바꿔줘야함.
+			this.documentService = new DocumentService(this.app, this.settings.OPENAI_API_KEY, "indexFile");
 			new Notice('DocumentService가 초기화되었습니다.');
 		} catch (error) {
 			new Notice(`DocumentService 초기화 실패: ${error.message}`);
@@ -104,6 +132,26 @@ export default class MyPlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+	}
+
+	// search view를 여는 함수
+	async activateSearchView() {
+		// 이미 동일한 타입의 뷰가 열려있으면 그거 사용
+		const existingLeaves = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE);
+		if (existingLeaves.length > 0) {
+			this.app.workspace.revealLeaf(existingLeaves[0]);
+			return;
+		}
+
+		// 오른쪽에 새로운 뷰 열기
+		const leaf = this.app.workspace.getRightLeaf(false);
+		if (leaf) {
+			await leaf.setViewState({
+				type: SEARCH_VIEW_TYPE,
+				active: true
+			});
+			this.app.workspace.revealLeaf(leaf);
+		}
 	}
 }
 

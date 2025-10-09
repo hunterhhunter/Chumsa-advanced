@@ -9,10 +9,10 @@ export class DocumentService {
     private database: MainDataBase;
     private embedModel: EmbedModel;
 
-    constructor(app: App, apiKey: string) {
+    constructor(app: App, apiKey: string, indexFileName: string) {
         this.app = app;
         this.database = new MainDataBase(app);
-        this.database.initialize("HNSW_INDEX_FILE", 1536, 10000);
+        this.database.initialize(indexFileName, 1536, 10000);
 
         this.embedModel = new EmbedModel(apiKey);
     }
@@ -55,15 +55,17 @@ export class DocumentService {
     public async searchSimilarBlocks(fileName: string, headingText: string, spliter: string) {
         const key = `${headingText.replace(spliter, "").trim()} of ${fileName}`;
         const hashedKey = hashString(key);
-        console.log(`documentservice querykey: ${key}`);
+        // console.log(`documentservice querykey: ${key}`);
         const queryVector = this.database.getVectorById(hashedKey)!;
-        console.log(`documentservice queryvector: ${queryVector}`);
+        // console.log(`documentservice queryvector: ${queryVector}`);
 
         const searchResult = await this.database.search(queryVector, 10);
         
-        for (const each of searchResult) {
-            console.log(`---------------------------------------------`);
-            console.log(`ID: ${each.id}, score: ${each.score}, fileName: ${each.metadata.fileName}, key: ${each.block.key}`);
-        }
+        // for (const each of searchResult) {
+        //     console.log(`---------------------------------------------`);
+        //     console.log(`ID: ${each.id}, score: ${each.score}, fileName: ${each.metadata.fileName}, key: ${each.block.key}`);
+        // }
+
+        return searchResult;
     }
 }

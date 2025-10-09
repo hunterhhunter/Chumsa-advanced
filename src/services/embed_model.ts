@@ -1,5 +1,4 @@
 import OpenAI from "openai";
-import { MainDataBase } from "./main_database";
 import { EmbededData, MdBlocks, MdHeaddingBlock } from "src/types/structures";
 
 export class EmbedModel {

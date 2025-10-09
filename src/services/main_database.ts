@@ -76,7 +76,7 @@ export class MainDataBase {
                 const result:MainDataBaseSearchResult = {id: each.id, score: each.score, metadata: metadata, block: block}
                 returnValue.push(result);
             } catch (error) {
-
+                console.warn(`MainDataBase - ID ${each.id}에 대한 메타데이터 또는 블록을 찾을 수 없어 검색 결과에서 제외합니다.`);
             }
         }
         return returnValue;
@@ -130,7 +130,6 @@ export class MainDataBase {
 
     public printAllBlocksbyFilePath(filePath: string) {
         const data = this.blockStore.getFileBlockIds(filePath);
-        console.log(`data: ${data.toString()}`);
         for (const each of data) {
             console.log(`block ID: ${each} / block Key: ${this.blockStore.search(each).key} / block text: ${this.blockStore.search(each).text}`);
             // console.log(`vector: ${this.index.getVectorById(each)}`);
