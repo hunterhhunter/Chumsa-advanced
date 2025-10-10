@@ -3,7 +3,7 @@ import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, set
 import { DocumentService } from './services/document_service';
 import { SearchView, SEARCH_VIEW_TYPE } from './views/search_view';
 import { ChumsaSettings, DEFAULT_SETTINGS } from './settings/settings';
-import { ChumsaSettingTab } from './settings/settings-tab';
+import { ChumsaSettingTab } from './settings/settings_tab';
 
 dotenv.config();
 
@@ -16,6 +16,8 @@ export default class MyPlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 		
+		await this.tryInitializeDocumentService
+
 		// 기존 Obsidian 플러그인 코드들...
 		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
 			new Notice('This is a notice!');
@@ -130,22 +132,6 @@ export default class MyPlugin extends Plugin {
         }
     }
 
-	// DocumentService 초기화 메서드
-	initializeDocumentService() {
-		if (!this.settings.OPENAI_API_KEY) {
-			new Notice('OpenAI API Key를 설정에서 입력해주세요.');
-			return;
-		}
-
-		try {
-			// TODO: indexFileName은 인덱스 초기화마다 바꿔줘야함.
-			this.documentService = new DocumentService(this.app, this.settings.OPENAI_API_KEY, "indexFile");
-			new Notice('DocumentService가 초기화되었습니다.');
-		} catch (error) {
-			new Notice(`DocumentService 초기화 실패: ${error.message}`);
-		}
-	}
-
 	onunload() {
 		// 정리 작업
 		this.searchRequestSeq = 0;
@@ -186,4 +172,26 @@ export default class MyPlugin extends Plugin {
         
         return leaf.view as SearchView;
     }
+
+	private async tryInitializeDocumentService(force = false): Promise<void> {
+        const apiKey = this.settings.OPENAI_API_KEY?.trim();
+        if (!apiKey) {
+            new Notice('OpenAI API Key가 설정되어 있지 않습니다. 설정에서 입력하세요.');
+            return;
+        }
+        if (this.documentService && !force) {
+            // 이미 초기화됨
+            return;
+        }
+        try {
+            // 기존 인스턴스가 있으면 교체
+            this.documentService = new DocumentService(this.app, apiKey, "indexFile");
+            new Notice('DocumentService가 초기화되었습니다.');
+        } catch (error) {
+            const msg = error instanceof Error ? error.message : String(error);
+            console.error('DocumentService 초기화 실패:', error);
+            new Notice(`DocumentService 초기화 실패: ${msg}`);
+        }
+    }
+
 }
