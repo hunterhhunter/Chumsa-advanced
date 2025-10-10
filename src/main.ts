@@ -20,6 +20,8 @@ const DEFAULT_SETTINGS: MyPluginSettings = {
 export default class MyPlugin extends Plugin {
 	settings: MyPluginSettings;
 	documentService: DocumentService | null = null;
+	// 검색 레이스 컨디션 방지용 ID 관리 변수
+	private searchRequestSeq = 0;
 
 	async onload() {
 		await this.loadSettings();
@@ -41,8 +43,10 @@ export default class MyPlugin extends Plugin {
 			}
 		});
 
+		// --------------------- SEARCH_VIEW 관련 로직 ---------------------
 		// SEARCH_VIEW를 등록
 		this.registerView(SEARCH_VIEW_TYPE, (leaf) => new SearchView(leaf));
+
 		// SEARCH_VIEW를 열기 위한 리본아이콘 등록
 		this.addRibbonIcon(
 			"brain-circuit", "첨사: 검색 뷰 열기", () => this.activateSearchView()
@@ -69,29 +73,71 @@ export default class MyPlugin extends Plugin {
 
 				// 아이콘 클릭시 실행할 이벤트 등록
 				iconEl.addEventListener('click', async (event) => {
-					this.activateSearchView();
-					// 정확한 키 생성을 위한 작업
-					const clickLineIndex = context.getSectionInfo(headings as HTMLElement)!.lineStart;
-					const clickLineText = context.getSectionInfo(headings as HTMLElement)?.text.split('\n')[clickLineIndex];
-					if (!clickLineText) return;
+					event.preventDefault();
+                    event.stopPropagation();
 
-					console.log(`---------------${context.getSectionInfo(headings as HTMLElement)?.lineStart}`);
+                    // 1. DocumentService 확인
+                    if (!this.documentService) {
+                        new Notice('먼저 DocumentService를 초기화해주세요.');
+                        return;
+                    }
 
-					const sourcePath = context.sourcePath;
-					const file = this.app.vault.getAbstractFileByPath(sourcePath);
+                    // 2. SearchView 활성화 및 인스턴스 획득
+                    const searchView = await this.activateSearchView();
+                    if (!searchView) {
+                        new Notice('검색 뷰를 열 수 없습니다.');
+                        return;
+                    }
 
-					let fileName = ""
-					if (!file) {
-						fileName = sourcePath.split('\n').pop()!;
-					} else {
-						fileName = file.name;
-					}
+                    // 3. 요청 ID 발급
+                    const requestId = ++this.searchRequestSeq;
 
-					// 1009: 현재 유사도 검색한 결고 콘솔에 띄우기까지 완료
-					const ad = await this.documentService?.searchSimilarBlocks(fileName, clickLineText, this.settings.spliter)!;
-					for (const each of ad) {
-						console.log(`ID: ${each.id}, Score: ${each.score}, Text: ${each.block.text}`)
-					}
+                    // 4. 로딩 상태 표시
+                    searchView.showLoadingSafe(requestId);
+
+                    try {
+                        // 5. 클릭한 헤딩 정보 추출
+                        const clickLineIndex = context.getSectionInfo(headings as HTMLElement)!.lineStart;
+                        const clickLineText = context.getSectionInfo(headings as HTMLElement)?.text.split('\n')[clickLineIndex];
+                        
+                        if (!clickLineText) {
+                            searchView.showErrorSafe("헤딩 정보를 가져올 수 없습니다.", requestId);
+                            return;
+                        }
+
+                        const sourcePath = context.sourcePath;
+                        const file = this.app.vault.getAbstractFileByPath(sourcePath);
+
+                        let fileName = "";
+                        if (!file) {
+                            fileName = sourcePath.split('/').pop()!;
+                        } else {
+                            fileName = file.name;
+                        }
+
+                        console.log(`검색 시작 - 파일: ${fileName}, 헤딩: ${clickLineText}`);
+
+                        // 6. 유사도 검색 실행
+                        const searchResults = await this.documentService.searchSimilarBlocks(
+                            fileName, 
+                            clickLineText, 
+                            this.settings.spliter
+                        );
+
+                        // 7. 결과를 SearchView에 전달
+                        await searchView.setResults(searchResults, requestId);
+
+                        // 콘솔 로그 (디버깅용)
+                        console.log(`검색 결과 ${searchResults.length}개 반환`);
+                        for (const result of searchResults) {
+                            console.log(`ID: ${result.id}, Score: ${result.score}, Text: ${result.block.text.slice(0, 50)}...`);
+                        }
+
+                    } catch (error) {
+                        console.error('검색 중 오류 발생:', error);
+                        const errorMsg = error instanceof Error ? error.message : "알 수 없는 오류";
+                        searchView.showErrorSafe(`검색 실패: ${errorMsg}`, requestId);
+                    }
 				});
 			})
 		});
@@ -124,6 +170,7 @@ export default class MyPlugin extends Plugin {
 
 	onunload() {
 		// 정리 작업
+		this.searchRequestSeq = 0;
 	}
 
 	async loadSettings() {
@@ -134,25 +181,33 @@ export default class MyPlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
 
-	// search view를 여는 함수
-	async activateSearchView() {
-		// 이미 동일한 타입의 뷰가 열려있으면 그거 사용
-		const existingLeaves = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE);
-		if (existingLeaves.length > 0) {
-			this.app.workspace.revealLeaf(existingLeaves[0]);
-			return;
-		}
+	/**
+     * SearchView를 활성화하고 인스턴스를 반환
+     * @returns SearchView 인스턴스 또는 null
+     */
+    async activateSearchView(): Promise<SearchView | null> {
+        // 이미 열린 뷰가 있으면 재사용
+        const existingLeaves = this.app.workspace.getLeavesOfType(SEARCH_VIEW_TYPE);
+        if (existingLeaves.length > 0) {
+            await this.app.workspace.revealLeaf(existingLeaves[0]);
+            return existingLeaves[0].view as SearchView;
+        }
 
-		// 오른쪽에 새로운 뷰 열기
-		const leaf = this.app.workspace.getRightLeaf(false);
-		if (leaf) {
-			await leaf.setViewState({
-				type: SEARCH_VIEW_TYPE,
-				active: true
-			});
-			this.app.workspace.revealLeaf(leaf);
-		}
-	}
+        // 오른쪽에 새로운 뷰 열기
+        const leaf = this.app.workspace.getRightLeaf(false);
+        if (!leaf) {
+            return null;
+        }
+
+        await leaf.setViewState({
+            type: SEARCH_VIEW_TYPE,
+            active: true
+        });
+        
+        await this.app.workspace.revealLeaf(leaf);
+        
+        return leaf.view as SearchView;
+    }
 }
 
 // =================== 설정창 (간단해진 버전) ===================
