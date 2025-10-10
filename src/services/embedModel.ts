@@ -1,1 +1,0 @@
-// TODO: MdHeaddingBLock을 입력받아 MdHeaddingBlock[], EmbededData[]를 반환하는 임베딩 함수 작성

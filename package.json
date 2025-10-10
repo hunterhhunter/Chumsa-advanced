@@ -30,6 +30,7 @@
 	"dependencies": {
 		"dotenv": "^17.2.2",
 		"hnswlib-wasm": "0.8.2",
-		"murmurhash3js-revisited": "^3.0.0"
+		"murmurhash3js-revisited": "^3.0.0",
+		"openai": "^6.1.0"
 	}
 }

@@ -1,6 +1,6 @@
 import { EmbededData, IVectorDB, VectorSearchResult, VectorSearchResults } from '../types/structures';
 import { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
-import { loadHnswlib, syncFileSystem, HnswlibModule } from 'hnswlib-wasm';
+import { loadHnswlib, syncFileSystem, HnswlibModule,  } from 'hnswlib-wasm';
 import { normalizePath, App } from 'obsidian';
 
 // DONE: 250923 벡터 인덱싱과 검색만을 담당하는 클래스로서의 역할을 상기하며 각 함수와 데이터가 알맞게 짜여져 있는지 확인
@@ -12,6 +12,7 @@ export class HNSWLibAdapter implements IVectorDB {
     private indexFileName: string;
     private dimension: number;
     private idToVectorMap: Map<number, number[]> = new Map();
+    private saveQueue: Promise<void> = Promise.resolve();
 
     public constructor(app: App) {
         this.app = app;
@@ -130,8 +131,19 @@ export class HNSWLibAdapter implements IVectorDB {
     }
 
     async save(): Promise<void> {
-        await this.hnswIndex.writeIndex(this.indexFileName);
-        await this.saveMaps();
+        // 저장 작업을 큐에 추가하여 순차적으로 실행
+        this.saveQueue = this.saveQueue.then(async () => {
+            try {
+                await this.hnswIndex.writeIndex(this.indexFileName);
+                await syncFileSystem('write');
+                await this.saveMaps();
+            } catch (error) {
+                console.error("HNSWLibAdapter - 저장 실패:", error);
+                throw error;
+            }
+        });
+
+        return this.saveQueue;
     }
 
     async saveMaps(): Promise<void> {
@@ -177,6 +189,8 @@ export class HNSWLibAdapter implements IVectorDB {
     }
 
     async resetIndex(maxElements: number, dimensions: number): Promise<void> {
+        const exists = this.hnswlib.EmscriptenFileSystemManager.checkFileExists(this.indexFileName);    
+
         this.hnswIndex = new this.hnswlib.HierarchicalNSW('cosine', dimensions, this.indexFileName);
         await syncFileSystem('read');
         this.hnswIndex.initIndex(maxElements, 32, 150, 42);
@@ -186,8 +200,11 @@ export class HNSWLibAdapter implements IVectorDB {
         this.save();
     }
 
-
-    getIdToVectorMap() {
+    public getIdToVectorMap() {
         return this.idToVectorMap;
+    }
+
+    public getVectorById(id: number) {
+        return this.idToVectorMap.get(id);
     }
 }
