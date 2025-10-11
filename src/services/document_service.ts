@@ -18,14 +18,14 @@ export class DocumentService {
     }
     
     // 한 문서 저장 함수
-    public async saveOneDocument(filePath: string, ) {
+    public async saveOneDocument(filePath: string, spliter: string = "### ") {
         // --- 1. 파일 읽어오기 ---
         const nomalizedPath = normalizePath(filePath)
         const content = await this.app.vault.adapter.read(nomalizedPath);
         const fileName = filePath.split('/').pop()!;
 
         // --- 2. 마크다운 파싱 ---
-        const blocks = parseMarkdownByHeadings(filePath, fileName, content, "###");
+        const blocks = parseMarkdownByHeadings(filePath, fileName, content, spliter);
 
         // --- 3. 블럭별로 임베딩 --- 
         const embededData = await this.embedModel.embeddingBlocks(blocks);
@@ -36,13 +36,13 @@ export class DocumentService {
     }
 
     // Vault 전체 순회 및 저장 함수
-    public async saveVault(allFilePaths: TFile[], batchSize: number = 10) {
+    public async saveVault(allFilePaths: TFile[], batchSize: number = 10, spliter: string = "### ") {
         console.log
         // batchSize만큼 saveOneDocument 병렬처리
         for (let i = 0; i < allFilePaths.length; i += batchSize) {
             const batch = allFilePaths.slice(i, i+batchSize);
             console.log(`HIHIHIHIHIHIHIH----------: ${batch.toString()}`);
-            const savePromise = batch.map(filePath => this.saveOneDocument(filePath.path));
+            const savePromise = batch.map(filePath => this.saveOneDocument(filePath.path, spliter));
             await Promise.all(savePromise);
         }
     }
@@ -67,5 +67,9 @@ export class DocumentService {
         // }
 
         return searchResult;
+    }
+
+    public async resetDatabase(): Promise<void> {
+        this.database.resetDatabase();
     }
 }

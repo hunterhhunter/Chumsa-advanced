@@ -2,7 +2,7 @@ import * as dotenv from 'dotenv';
 import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, setIcon, Setting, TFile } from 'obsidian';
 import { DocumentService } from './services/document_service';
 import { SearchView, SEARCH_VIEW_TYPE } from './views/search_view';
-import { ChumsaSettings, DEFAULT_SETTINGS } from './settings/settings';
+import { ChumsaSettings, DEFAULT_SETTINGS, getHeadingConfig, HeadingLevel } from './settings/settings';
 import { ChumsaSettingTab } from './settings/settings_tab';
 
 dotenv.config();
@@ -16,7 +16,7 @@ export default class MyPlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 		
-		await this.tryInitializeDocumentService
+		await this.tryInitializeDocumentService();
 
 		// 기존 Obsidian 플러그인 코드들...
 		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
@@ -37,8 +37,11 @@ export default class MyPlugin extends Plugin {
 		);
 
 		this.registerMarkdownPostProcessor((element, context) => {
-			// 랜더링된 요소 내에서 h3 헤딩 태그 찾기
-			const headings = element.querySelectorAll("h3");
+			// 설정 내 spliter 레벨 가져오기
+			const cfg = getHeadingConfig(this.settings.headingLevel);
+
+			// 랜더링된 요소 내에서 spliter 태그 찾기
+			const headings = element.querySelectorAll(cfg.tag);
 			
 			headings.forEach(headings => {
 				if (headings.querySelector(".search-icon")) {
@@ -56,16 +59,14 @@ export default class MyPlugin extends Plugin {
 				setIcon(iconEl, 'link');
 
 				// 아이콘 클릭시 실행할 이벤트 등록
-				iconEl.addEventListener('click', async (event) => {
-					event.preventDefault();
+				this.registerDomEvent(iconEl, 'click', async (event: MouseEvent) => {
+                    event.preventDefault();
                     event.stopPropagation();
-
-					await this.handleHeadingSearch(headings, context);
-				});
+                    await this.handleHeadingSearch(headings, context);
+                });
 			})
 		});
 
-		// TODO: spliter 설정가능하게
 		this.addSettingTab(new ChumsaSettingTab(this.app, this));
 
 		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
@@ -138,7 +139,20 @@ export default class MyPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const raw = await this.loadData();
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, raw);
+
+		// 마이그레이션: headingLevel 없고 spliter만 있을 때 유추
+		if (!this.settings.headingLevel) {
+			const m = (this.settings.spliter || "### ").trim();
+			const map: Record<string, 'h1'|'h2'|'h3'|'h4'|'h5'|'h6'> = {
+				'#': 'h1','##': 'h2','###': 'h3','####': 'h4','#####': 'h5','######': 'h6'
+			};
+			this.settings.headingLevel = map[m.replace(/\s+$/, '')] ?? 'h3';
+			// 동기화
+			this.settings.spliter = getHeadingConfig(this.settings.headingLevel).splitter;
+			await this.saveSettings();
+		}
 	}
 
 	async saveSettings() {
@@ -194,4 +208,60 @@ export default class MyPlugin extends Plugin {
         }
     }
 
+    public async handleHeadingLevelChange(level: HeadingLevel): Promise<void> {
+    const cfg = getHeadingConfig(level);
+    try {
+        // 1) DocumentService 재초기화
+        await this.tryInitializeDocumentService(true);
+
+        if (!this.documentService) {
+            new Notice("DocumentService 초기화 실패로 재인덱싱을 건너뜁니다.");
+            return;
+        }
+
+        // 2) DB 초기화(+ 선택) 후 전체 재인덱싱
+        await this.documentService.resetDatabase();
+        const files = this.app.vault.getMarkdownFiles();
+        if (files.length > 0) {
+            new Notice(`전체 재인덱싱 시작 (${files.length}개)…`);
+            await this.documentService.saveVault(files, 10, cfg.splitter);
+            new Notice("전체 재인덱싱 완료");
+        }
+
+        // 3) 모든 Markdown 뷰 재렌더링
+        await this.rerenderAllMarkdownViews();
+
+        } catch (e) {
+            console.error("헤딩 레벨 변경 처리 중 오류:", e);
+            new Notice("헤딩 레벨 변경 처리 실패. 콘솔 로그를 확인하세요.");
+        }
+    }
+
+    /**
+     * 마크다운 문서 껐다 켜서 강제 재랜더링
+     */
+    private async rerenderAllMarkdownViews(): Promise<void> {
+        const openFiles: TFile[] = [];
+        const leaves = this.app.workspace.getLeavesOfType("markdown");
+        
+        for (const leaf of leaves) {
+            const view = leaf.view as MarkdownView;
+            if (view.file) {
+                openFiles.push(view.file);
+            }
+        }
+        
+        // 모든 마크다운 탭 닫기
+        for (const leaf of leaves) {
+            leaf.detach();
+        }
+        
+        // 약간의 딜레이 후 다시 열기
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // 파일들을 다시 열기
+        for (const file of openFiles) {
+            await this.app.workspace.getLeaf(false).openFile(file);
+        }
+    }
 }

@@ -140,4 +140,10 @@ export class MainDataBase {
         return this.index.getVectorById(id);
     }
 
+    public async resetDatabase(): Promise<void> {
+        await this.index.resetIndex(10000, 1536);
+        await this.metadataStore.resetStore();
+        await this.blockStore.resetStore();
+    }
+
 }

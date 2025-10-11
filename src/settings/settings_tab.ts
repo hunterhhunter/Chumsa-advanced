@@ -1,5 +1,6 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import type ChumsaPlugin from "../main";
+import { getHeadingConfig, HEADING_CONFIGS, HeadingLevel } from "./settings";
 
 export class ChumsaSettingTab extends PluginSettingTab {
     plugin: ChumsaPlugin;
@@ -27,28 +28,37 @@ export class ChumsaSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
-        // ===== DocumentService 초기화 =====
+        // ===== 헤딩 레벨 선택(나열형) =====
         new Setting(containerEl)
-            .setName("DocumentService 초기화")
-            .setDesc("API Key 입력 후 이 버튼을 눌러 DocumentService를 초기화하세요.")
-            .addButton(button => button
-                .setButtonText("초기화")
-                .setCta()
-                .onClick(() => {
-                    this.plugin.initializeDocumentService();
-                }));
+            .setName("헤딩 레벨")
+            .setDesc("마크다운 파싱과 UI에서 사용할 헤딩 수준을 선택하세요.")
+            .addDropdown(drop => {
+                // 옵션 채우기
+                (Object.keys(HEADING_CONFIGS) as HeadingLevel[]).forEach(level => {
+                    drop.addOption(level, HEADING_CONFIGS[level].label);
+                });
+                drop.setValue(this.plugin.settings.headingLevel);
+                drop.onChange(async (value) => {
+                    const level = (value as HeadingLevel);
 
-        // ===== 구분자 설정 =====
-        new Setting(containerEl)
-            .setName("헤딩 구분자")
-            .setDesc("마크다운 파싱 시 사용할 헤딩 구분자 (기본값: '### ')")
-            .addText(text => text
-                .setPlaceholder("### ")
-                .setValue(this.plugin.settings.spliter)
-                .onChange(async (value) => {
-                    this.plugin.settings.spliter = value;
+                    const ok = confirm(
+                        `헤딩 레벨을 ${HEADING_CONFIGS[level].label}로 변경하시겠습니까?\n\n` +
+                        "- 기존 인덱스가 초기화되고 전체 문서가 재인덱싱됩니다.\n" +
+                        "- 열려있는 문서들도 재렌더링됩니다."
+                    );
+                    if (!ok) { drop.setValue(this.plugin.settings.headingLevel); return; }
+
+                    // 설정 저장(+ spliter 동기화)
+                    this.plugin.settings.headingLevel = level;
+                    this.plugin.settings.spliter = getHeadingConfig(level).splitter;
                     await this.plugin.saveSettings();
-                }));
+
+                    // 플러그인 쪽에 일괄 처리 위임
+                    await this.plugin.handleHeadingLevelChange(level);
+
+                    new Notice(`헤딩 레벨 변경 완료: ${HEADING_CONFIGS[level].label}`);
+                });
+            });
 
         // ===== 테스트 섹션 =====
         containerEl.createEl("h3", { text: "테스트" });
@@ -111,7 +121,7 @@ export class ChumsaSettingTab extends PluginSettingTab {
                 await this.plugin.documentService.saveOneDocument(files[0].path);
                 new Notice(`✅ 인덱싱 완료: ${files[0].name}`);
             } else {
-                await this.plugin.documentService.saveVault(files);
+                await this.plugin.documentService.saveVault(files, 10, this.plugin.settings.spliter);
                 new Notice(`✅ 전체 인덱싱 완료: ${files.length}개 파일`);
             }
         } catch (error) {
