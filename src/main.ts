@@ -29,7 +29,7 @@ export default class MyPlugin extends Plugin {
 
 		// --------------------- SEARCH_VIEW 관련 로직 ---------------------
 		// SEARCH_VIEW를 등록
-		this.registerView(SEARCH_VIEW_TYPE, (leaf) => new SearchView(leaf));
+		this.registerView(SEARCH_VIEW_TYPE, (leaf) => new SearchView(leaf, this));
 
 		// SEARCH_VIEW를 열기 위한 리본아이콘 등록
 		this.addRibbonIcon(

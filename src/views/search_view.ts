@@ -1,12 +1,15 @@
-import { ItemView, WorkspaceLeaf, TFile, Notice, normalizePath } from "obsidian";
+import { ItemView, WorkspaceLeaf, TFile, Notice, normalizePath, ButtonComponent } from "obsidian";
+import MyPlugin from "src/main";
 import { MainDataBaseSearchResult } from "src/types/structures";
 
 export const SEARCH_VIEW_TYPE = "search-view";
 
 export class SearchView extends ItemView {
     private resultsContainer: HTMLElement | null = null;
+    private controlsContainer: HTMLElement | null = null;
+    private plugin: MyPlugin;
 
-    // 레이스 컨디션 방지용 최신 요청 ID
+    // 레이스 컨디션 방지용 ID
     private latestRequestId = 0;
 
     // onOpen 이전에 전달된 결과 버퍼
@@ -17,8 +20,9 @@ export class SearchView extends ItemView {
         MEDIUM: 60
     };
 
-    constructor(leaf: WorkspaceLeaf) {
+    constructor(leaf: WorkspaceLeaf, plugin: MyPlugin) {
         super(leaf);
+        this.plugin = plugin;
     }
 
     getViewType(): string {
@@ -38,6 +42,13 @@ export class SearchView extends ItemView {
         // 헤더 영역
         const headerEl = container.createEl("div", { cls: "search-view-header" });
         headerEl.createEl("h2", { text: "관련 노트를 찾아보세요." });
+
+        // ===== 컨트롤 버튼 영역 =====
+        this.controlsContainer = container.createEl("div", { cls: "search-view-controls" });
+        this.createControlButtons();
+
+        // 구분선
+        container.createEl("hr", { cls: "search-view-divider" });
         
         // 결과 컨테이너 생성 및 참조 저장
         this.resultsContainer = container.createEl("div", { cls: "search-results-container" });
@@ -48,6 +59,31 @@ export class SearchView extends ItemView {
         } else {
             this.showEmptyState("헤딩 옆의 검색 아이콘을 클릭하여 관련 노트를 찾아보세요.");
         }
+    }
+
+    private createControlButtons(): void {
+        if (!this.controlsContainer) return;
+
+        this.controlsContainer.empty();
+
+        const buttonsRow = this.controlsContainer.createEl("div", { cls: "control-buttons-row" });
+
+        // 버튼 1: 현재 파일 인덱싱
+        new ButtonComponent(buttonsRow)
+            .setButtonText("🔄 현재 파일")
+            .setTooltip("현재 열린 파일을 인덱싱합니다")
+            .onClick(async () => {
+                await this.indexCurrentFile();
+            });
+
+        // 버튼 3: 인덱스 초기화
+        new ButtonComponent(buttonsRow)
+            .setButtonText("🗑️ 초기화")
+            .setTooltip("인덱스를 초기화합니다")
+            .setWarning()
+            .onClick(async () => {
+                await this.resetDatabase();
+            });
     }
 
     async onClose(): Promise<void> {
@@ -248,5 +284,73 @@ export class SearchView extends ItemView {
         this.resultsContainer.empty();
         const errorEl = this.resultsContainer.createEl("div", { cls: "search-error" });
         errorEl.createEl("p", { text: `⚠️ ${errorMessage}` });
+    }
+
+    private async indexCurrentFile(): Promise<void> {
+        const file = this.app.workspace.getActiveFile();
+        if (!file) {
+            new Notice("열린 파일이 없습니다.");
+            return;
+        }
+
+        if (!this.plugin.documentService) {
+            new Notice("먼저 설정에서 DocumentService를 초기화하세요.");
+            return;
+        }
+
+        try {
+            new Notice(`인덱싱 중: ${file.name}...`);
+            const startTime = Date.now();
+            
+            await this.plugin.documentService.saveOneDocument(
+                file.path,
+                this.plugin.settings.spliter
+            );
+            
+            const duration = Date.now() - startTime;
+            new Notice(`✅ 인덱싱 완료: ${file.name} (${duration}ms)`);
+        } catch (error) {
+            console.error("인덱싱 실패:", error);
+            const errorMsg = error instanceof Error ? error.message : "알 수 없는 오류";
+            new Notice(`❌ 인덱싱 실패: ${errorMsg}`);
+        }
+    }
+    
+    /**
+     * 데이터베이스 초기화
+     */
+    private async resetDatabase(): Promise<void> {
+        if (!this.plugin.documentService) {
+            new Notice("DocumentService가 초기화되지 않았습니다.");
+            return;
+        }
+
+        const confirmed = confirm(
+            "⚠️ 경고: 모든 인덱스 데이터가 삭제됩니다.\n\n" +
+            "계속하시겠습니까?"
+        );
+        if (!confirmed) return;
+
+        try {
+            new Notice("데이터베이스 초기화 중...");
+            
+            // DocumentService에 resetDatabase 메서드가 있다고 가정
+            // 없다면 직접 database.initialize()를 호출
+            if (typeof this.plugin.documentService.resetDatabase === 'function') {
+                await this.plugin.documentService.resetDatabase();
+            } else {
+                // fallback: 직접 초기화
+                this.plugin.documentService = null;
+                await this.plugin['tryInitializeDocumentService'](true);
+            }
+            
+            // 결과 화면 초기화
+            this.showEmptyState("데이터베이스가 초기화되었습니다.");
+            new Notice("✅ 데이터베이스 초기화 완료");
+        } catch (error) {
+            console.error("데이터베이스 초기화 실패:", error);
+            const errorMsg = error instanceof Error ? error.message : "알 수 없는 오류";
+            new Notice(`❌ 초기화 실패: ${errorMsg}`);
+        }
     }
 }

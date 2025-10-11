@@ -171,3 +171,37 @@
         -webkit-line-clamp: 2;
     }
 }
+
+/* ===== 컨트롤 버튼 영역 ===== */
+.search-view-controls {
+    padding: 1em;
+    background-color: var(--background-secondary);
+    border-radius: 6px;
+    margin-bottom: 1em;
+}
+
+.control-buttons-row {
+    display: flex;
+    gap: 0.5em;
+    flex-wrap: wrap;
+}
+
+.control-buttons-row button {
+    flex: 1;
+    min-width: 100px;
+}
+
+.search-view-divider {
+    border: none;
+    border-top: 1px solid var(--background-modifier-border);
+    margin: 1em 0;
+}
+
+/* 경고 버튼 스타일 */
+.control-buttons-row button.mod-warning {
+    background-color: var(--interactive-accent-hover);
+}
+
+.control-buttons-row button.mod-warning:hover {
+    background-color: var(--color-red);
+}
