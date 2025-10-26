@@ -2,6 +2,7 @@ import esbuild from "esbuild";
 import process from "process";
 import fs from "fs/promises";
 import path from "path";
+import builtins from "builtin-modules";
 import 'dotenv/config';
 
 const banner =
@@ -25,7 +26,25 @@ const context = await esbuild.context({
   banner: { js: banner },
   entryPoints: ["src/main.ts"],
   bundle: true,
-  external: ["obsidian"],
+  external: [
+    "obsidian",
+    "electron",
+    // CodeMirror 6 패키지들을 external로 추가
+    "@codemirror/autocomplete",
+    "@codemirror/collab",
+    "@codemirror/commands",
+    "@codemirror/language",
+    "@codemirror/lint",
+    "@codemirror/search",
+    "@codemirror/state",
+    "@codemirror/view",
+    // Lezer 파서 관련
+    "@lezer/common",
+    "@lezer/highlight",
+    "@lezer/lr",
+    // Node.js 내장 모듈
+    ...builtins
+  ],
   format: "cjs",
   target: "es2020",
   logLevel: "info",

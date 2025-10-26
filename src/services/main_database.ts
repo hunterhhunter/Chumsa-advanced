@@ -52,9 +52,9 @@ export class MainDataBase {
     }
 
     public async deleteItem(id: number) {
-        this.metadataStore.deleteItem(id);
-        this.blockStore.deleteItem(id);
-        this.index.deleteItem(id);
+        await this.metadataStore.deleteItem(id);
+        await this.blockStore.deleteItem(id);
+        await this.index.deleteItem(id);
     }
 
     // 

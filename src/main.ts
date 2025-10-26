@@ -4,28 +4,22 @@ import { DocumentService } from './services/document_service';
 import { SearchView, SEARCH_VIEW_TYPE } from './views/search_view';
 import { ChumsaSettings, DEFAULT_SETTINGS, getHeadingConfig, HeadingLevel } from './settings/settings';
 import { ChumsaSettingTab } from './settings/settings_tab';
+import { SearchFilter } from './services/search_filter';
+
 
 dotenv.config();
 
 export default class MyPlugin extends Plugin {
 	settings: ChumsaSettings;
 	documentService: DocumentService | null = null;
+    searchFilter: SearchFilter | null = null;
 	// 검색 레이스 컨디션 방지용 ID 관리 변수
 	private searchRequestSeq = 0;
 
 	async onload() {
 		await this.loadSettings();
-		
 		await this.tryInitializeDocumentService();
-
-		// 기존 Obsidian 플러그인 코드들...
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
-			new Notice('This is a notice!');
-		});
-		ribbonIconEl.addClass('my-plugin-ribbon-class');
-
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status Bar Text');
+        this.initializeSearchFilter();
 
 		// --------------------- SEARCH_VIEW 관련 로직 ---------------------
 		// SEARCH_VIEW를 등록
@@ -68,16 +62,10 @@ export default class MyPlugin extends Plugin {
 		});
 
 		this.addSettingTab(new ChumsaSettingTab(this.app, this));
-
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
-		});
-
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
 	}
 
 	/**
-     * 헤딩 검색 핸들러 (분리된 메서드)
+     * 헤딩 검색 핸들러 (품질 필터링 적용)
      */
     private async handleHeadingSearch(
         heading: Element,
@@ -85,6 +73,11 @@ export default class MyPlugin extends Plugin {
     ): Promise<void> {
         if (!this.documentService) {
             new Notice('먼저 DocumentService를 초기화해주세요.');
+            return;
+        }
+
+        if (!this.searchFilter) {
+            new Notice('SearchFilter가 초기화되지 않았습니다.');
             return;
         }
 
@@ -114,17 +107,34 @@ export default class MyPlugin extends Plugin {
 
             const file = this.app.vault.getAbstractFileByPath(context.sourcePath);
             const fileName = file ? file.name : context.sourcePath.split('/').pop()!;
+            const currentFilePath = context.sourcePath;
 
             console.log(`검색 시작 - 파일: ${fileName}, 헤딩: ${clickLineText}`);
 
-            const searchResults = await this.documentService.searchSimilarBlocks(
+            // 50개 검색 (필터링 전)
+            const rawResults = await this.documentService.searchSimilarBlocks(
                 fileName,
                 clickLineText,
-                this.settings.spliter
+                this.settings.spliter,
+                50
             );
 
-            await searchView.setResults(searchResults, requestId);
-            console.log(`검색 결과 ${searchResults.length}개 반환`);
+            console.log(`원본 검색 결과: ${rawResults.length}개`);
+
+            // 쿼리에서 태그 추출
+            const queryTags = this.searchFilter.extractTagsFromText(clickLineText);
+
+            // 품질 필터링 적용
+            const filteredResults = this.searchFilter.filterResults(
+                rawResults,
+                queryTags,
+                currentFilePath
+            );
+
+            console.log(`필터링 후 결과: ${filteredResults.length}개`);
+
+            // 결과를 SearchView에 전달
+            await searchView.setResults(filteredResults, requestId);
 
         } catch (error) {
             console.error('검색 중 오류 발생:', error);
@@ -199,13 +209,21 @@ export default class MyPlugin extends Plugin {
         }
         try {
             // 기존 인스턴스가 있으면 교체
-            this.documentService = new DocumentService(this.app, apiKey, "indexFile");
+            this.documentService = new DocumentService(this.app, apiKey, "iiiidd");
             new Notice('DocumentService가 초기화되었습니다.');
         } catch (error) {
             const msg = error instanceof Error ? error.message : String(error);
             console.error('DocumentService 초기화 실패:', error);
             new Notice(`DocumentService 초기화 실패: ${msg}`);
         }
+    }
+
+    /**
+     * SearchFilter 초기화
+     */
+    private initializeSearchFilter(): void {
+        this.searchFilter = new SearchFilter(this.app);
+        console.log('SearchFilter 초기화 완료');
     }
 
     public async handleHeadingLevelChange(level: HeadingLevel): Promise<void> {
@@ -265,3 +283,4 @@ export default class MyPlugin extends Plugin {
         }
     }
 }
+

@@ -205,3 +205,30 @@
 .control-buttons-row button.mod-warning:hover {
     background-color: var(--color-red);
 }
+
+/* 기존 스타일... */
+
+/* ✅ 편집 모드 검색 아이콘 */
+.cm-search-icon {
+    display: inline-block !important;
+    vertical-align: middle;
+    margin-left: 0.5em;
+    opacity: 0.5;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.cm-search-icon:hover {
+    opacity: 1 !important;
+}
+
+.cm-search-icon svg {
+    width: 16px;
+    height: 16px;
+    vertical-align: middle;
+}
+
+/* Live Preview 모드에서만 표시 */
+.cm-line .cm-search-icon {
+    display: inline-block !important;
+}

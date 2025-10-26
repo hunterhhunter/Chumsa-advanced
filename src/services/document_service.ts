@@ -6,7 +6,7 @@ import { hashString } from "src/utils/hash_func";
 
 export class DocumentService {
     private app: App;
-    private database: MainDataBase;
+    public database: MainDataBase;
     private embedModel: EmbedModel;
 
     constructor(app: App, apiKey: string, indexFileName: string) {
@@ -35,6 +35,76 @@ export class DocumentService {
         this.database.printAllBlocksbyFilePath(filePath);
     }
 
+    /**
+     * 🆕 한 문서 업데이트 함수
+     * 기존 블록을 삭제하고 새로운 블록으로 교체
+     */
+    public async updateOneDocument(
+        filePath: string, 
+        spliter: string = "### "
+    ): Promise<{ updated: boolean; blockCount: number; reason: string }> {
+        const normalizedPath = normalizePath(filePath);
+
+        // 1. 파일이 인덱싱되어 있는지 확인
+        if (!this.database.hasFile(normalizedPath)) {
+            console.log(`[DocumentService] 파일이 인덱싱되지 않음: ${normalizedPath}`);
+            return { 
+                updated: false, 
+                blockCount: 0, 
+                reason: "파일이 인덱싱되지 않음. saveOneDocument를 사용하세요." 
+            };
+        }
+
+        try {
+            // 2. 기존 블록 삭제
+            const existingBlockIds = this.database.getFileBlockIds(normalizedPath);
+            console.log(`[DocumentService] 기존 블록 삭제 중: ${existingBlockIds.length}개`);
+            
+            await this.database.deleteFileBlocks(normalizedPath);
+
+            console.log(`[DocumentService] 삭제 완료, 인덱스 저장 중...`);
+            await this.database.saveData();
+
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // 3. 파일 읽기 및 파싱
+            const content = await this.app.vault.adapter.read(normalizedPath);
+            const fileName = filePath.split('/').pop()!;
+            const blocks = parseMarkdownByHeadings(filePath, fileName, content, spliter);
+
+            if (blocks.blocks.length === 0) {
+                console.warn(`[DocumentService] 파싱된 블록 없음: ${normalizedPath}`);
+                return { 
+                    updated: false, 
+                    blockCount: 0, 
+                    reason: "파싱된 블록 없음" 
+                };
+            }
+
+            // 4. 임베딩 생성
+            const embeddedData = await this.embedModel.embeddingBlocks(blocks);
+
+            // 5. 새 블록 추가
+            await this.database.addItems(blocks, embeddedData);
+            await this.database.saveData();
+
+            console.log(
+                `[DocumentService] ✅ 업데이트 완료: ${normalizedPath} ` +
+                `(${existingBlockIds.length}개 → ${blocks.blocks.length}개 블록)`
+            );
+
+            return { 
+                updated: true, 
+                blockCount: blocks.blocks.length, 
+                reason: "업데이트 완료" 
+            };
+
+        } catch (error) {
+            console.error(`[DocumentService] 업데이트 실패: ${normalizedPath}`, error);
+            throw error;
+        }
+    }
+
     // Vault 전체 순회 및 저장 함수
     public async saveVault(allFilePaths: TFile[], batchSize: number = 10, spliter: string = "### ") {
         console.log
@@ -52,7 +122,7 @@ export class DocumentService {
         this.database.renameFilePath(oldPath, newPath);
     }
 
-    public async searchSimilarBlocks(fileName: string, headingText: string, spliter: string) {
+    public async searchSimilarBlocks(fileName: string, headingText: string, spliter: string, topK: number = 50) {
         const key = `${headingText.replace(spliter, "").trim()} of ${fileName}`;
         const hashedKey = hashString(key);
         // console.log(`documentservice querykey: ${key}`);
