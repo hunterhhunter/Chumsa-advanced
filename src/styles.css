@@ -228,7 +228,28 @@
     vertical-align: middle;
 }
 
-/* Live Preview 모드에서만 표시 */
-.cm-line .cm-search-icon {
-    display: inline-block !important;
+/* 드래그 앤 드롭 스타일 */
+.search-result-card[draggable="true"] {
+    transition: all 0.2s ease;
+}
+
+.search-result-card[draggable="true"]:hover {
+    cursor: grab !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.search-result-card[draggable="true"]:active {
+    cursor: grabbing !important;
+}
+
+.search-result-card.dragging {
+    opacity: 0.5;
+    transform: scale(0.95);
+    cursor: grabbing !important;
+}
+
+.chumsa-drag-preview {
+    font-family: var(--font-interface);
+    pointer-events: none;
 }

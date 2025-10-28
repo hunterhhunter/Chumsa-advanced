@@ -1,7 +1,7 @@
 import { ItemView, WorkspaceLeaf, TFile, Notice, normalizePath, ButtonComponent, MarkdownRenderer, MarkdownView } from "obsidian";
 import MyPlugin from "src/main";
 import { MainDataBaseSearchResult } from "src/types/structures";
-import { getHeadingConfig } from "src/settings/settings";
+import { setupDragData, createDragPreview } from "src/utils/drag_handler";
 
 export const SEARCH_VIEW_TYPE = "search-view";
 
@@ -194,8 +194,9 @@ export class SearchView extends ItemView {
 
         const card = this.resultsContainer.createEl("div", { cls: "search-result-card" });
 
-        // 포인터 스타일
-        card.style.cursor = "pointer";
+        // 드래그 가능하도록 설정
+        card.setAttribute('draggable', 'true');
+        card.style.cursor = "grab";
 
         // 메타데이터 영역
         const metaEl = card.createEl("div", { cls: "result-meta" });
@@ -266,9 +267,43 @@ export class SearchView extends ItemView {
             }
         }
 
+        this.setupDragAndDrop(card, result);
+
         // 클릭 이벤트 등록: 파일 열기
         this.registerDomEvent(card, "click", async () => {
             await this.handleResultClick(result);
+        });
+    }
+
+    /**
+     * 드래그 앤 드롭 설정
+     */
+    private setupDragAndDrop(
+        element: HTMLElement,
+        result: MainDataBaseSearchResult
+    ): void {
+        // 드래그 시작
+        this.registerDomEvent(element, 'dragstart', (event: DragEvent) => {
+            if (!event.dataTransfer) return;
+
+            // 링크 데이터 설정
+            const linkText = setupDragData(event.dataTransfer, result, false);
+            
+            // 드래그 프리뷰 이미지
+            const preview = createDragPreview(result);
+            event.dataTransfer.setDragImage(preview, 20, 20);
+            
+            // 시각적 피드백
+            element.addClass('dragging');
+            element.style.cursor = 'grabbing';
+            
+            console.log(`[Drag] ${linkText}`);
+        });
+
+        // 드래그 종료
+        this.registerDomEvent(element, 'dragend', () => {
+            element.removeClass('dragging');
+            element.style.cursor = 'grab';
         });
     }
 
