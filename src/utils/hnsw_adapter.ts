@@ -1,9 +1,7 @@
 import { EmbededData, IVectorDB, VectorSearchResult, VectorSearchResults } from '../types/structures';
 import { HierarchicalNSW } from 'hnswlib-wasm/dist/hnswlib-wasm';
-import { loadHnswlib, syncFileSystem, HnswlibModule,  } from 'hnswlib-wasm';
+import { loadHnswlib, syncFileSystem, HnswlibModule } from 'hnswlib-wasm';
 import { normalizePath, App } from 'obsidian';
-
-// DONE: 250923 벡터 인덱싱과 검색만을 담당하는 클래스로서의 역할을 상기하며 각 함수와 데이터가 알맞게 짜여져 있는지 확인
 
 export class HNSWLibAdapter implements IVectorDB {
     private app: App;
@@ -12,6 +10,7 @@ export class HNSWLibAdapter implements IVectorDB {
     private indexFileName: string;
     private dimension: number;
     private idToVectorMap: Map<number, number[]> = new Map();
+    private deletedIds: Set<number> = new Set();
     private saveQueue: Promise<void> = Promise.resolve();
 
     public constructor(app: App) {
@@ -25,6 +24,7 @@ export class HNSWLibAdapter implements IVectorDB {
 
         this.hnswIndex = new this.hnswlib.HierarchicalNSW('cosine', dimensions, indexFileName);
         await syncFileSystem('read');
+        this.hnswlib.EmscriptenFileSystemManager.initializeFileSystem('IDBFS');
 
         const exist = this.hnswlib.EmscriptenFileSystemManager.checkFileExists(indexFileName);
         if (!exist) {
@@ -45,7 +45,6 @@ export class HNSWLibAdapter implements IVectorDB {
         const vectorsToAdd: number[][] = [];
         const ids: number[] = [];
 
-        // 데이터 검증 및 필터링
         for (const each of data) {
             // 벡터 유효성 검사
             if (!each.vector || each.vector.length === 0) {
@@ -58,19 +57,26 @@ export class HNSWLibAdapter implements IVectorDB {
                 continue;
             }
             
-            // NaN 또는 undefined 체크
             if (each.vector.some(v => v === undefined || v === null || isNaN(v))) {
                 console.warn(`HNSWLibAdapter - 잘못된 벡터 값: ID ${each.id}`);
                 continue;
             }
             
-            // 중복 제거
-            if (this.idToVectorMap.has(each.id)) {
-                console.warn(`HNSWLibAdapter - 이미 존재하는 ID 값: ID ${each.id}`);
+            // 중복 확인: 삭제된 ID인지 체크
+            const isDeleted = this.deletedIds.has(each.id);
+            const existsInMap = this.idToVectorMap.has(each.id);
+
+            if (existsInMap && !isDeleted) {
+                console.warn(`HNSWLibAdapter - 이미 존재하는 ID (활성): ${each.id}`);
                 continue;
             }
 
-            // 원소 추가
+            // 삭제된 ID 재사용
+            if (isDeleted) {
+                console.log(`HNSWLibAdapter - 삭제된 ID 재사용: ${each.id}`);
+                this.deletedIds.delete(each.id);
+            }
+
             ids.push(each.id);
             vectorsToAdd.push(each.vector);
             this.idToVectorMap.set(each.id, each.vector);
@@ -83,7 +89,7 @@ export class HNSWLibAdapter implements IVectorDB {
 
         try {
             console.log(`HNSWLibAdapter - ${ids.length}개 벡터 추가 시작`);
-            await this.hnswIndex.addPoints(vectorsToAdd, ids, false);
+            await this.hnswIndex.addPoints(vectorsToAdd, ids, true);
             console.log(`HNSWLibAdapter - ${ids.length}개 벡터 추가 완료`);
         } catch (error) {
             console.error("HNSWLibAdapter - HNSW 인덱스 추가 실패:", error);
@@ -91,7 +97,6 @@ export class HNSWLibAdapter implements IVectorDB {
         }
     }
 
-    // DONE: search 재구현
     async search(queryVector: number[], top_k: number): Promise<VectorSearchResults> {
         const result = this.hnswIndex.searchKnn(queryVector, top_k, undefined);
 
@@ -101,10 +106,10 @@ export class HNSWLibAdapter implements IVectorDB {
             const label = result.neighbors[i];
             const score = result.distances[i];
 
-            const eachResult: VectorSearchResult = ({
+            const eachResult: VectorSearchResult = {
                 id: label,
                 score: 1 - score, 
-            });
+            };
 
             returnValue.results.push(eachResult);
         }
@@ -113,25 +118,44 @@ export class HNSWLibAdapter implements IVectorDB {
     }
 
     async deleteItem(id: number): Promise<void> {
-        if (this.idToVectorMap.get(id) === undefined) {
-            console.warn(`HNSWLibAdapter - ID ${id}에 해당하는 벡터을 찾을 수 없습니다.`);
+        // idToVectorMap에 없으면 즉시 반환
+        if (!this.idToVectorMap.has(id)) {
+            console.warn(`HNSWLibAdapter - ID ${id}가 맵에 없음 (이미 삭제됨)`);
             return;
         }
         
         try {
-            // HNSW 인덱스에서 제거
+            // 🔧 HNSW 인덱스에서 라벨 존재 여부 확인
+            const idLabels = this.hnswIndex.getUsedLabels();
+            const existsInIndex = idLabels.includes(id);
+
+            if (!existsInIndex) {
+                console.warn(`HNSWLibAdapter - ID ${id}가 HNSW 인덱스에 없음 (맵에서만 제거)`);
+                // 맵에서만 제거하고 deletedIds에 추가
+                this.idToVectorMap.delete(id);
+                this.deletedIds.add(id);
+                return;
+            }
+
+            // HNSW 인덱스에서 삭제
             this.hnswIndex.markDelete(id);
+            this.deletedIds.add(id);
             this.idToVectorMap.delete(id);
             
             console.log(`HNSWLibAdapter - 벡터 제거 완료: ID=${id}`);
         } catch (error) {
             console.error(`HNSWLibAdapter - 벡터 제거 실패: ID=${id}`, error);
-            throw error;
+            
+            // 🔧 실패해도 맵에서는 제거 (동기화 유지)
+            this.idToVectorMap.delete(id);
+            this.deletedIds.add(id);
+            
+            // 에러를 다시 던지지 않음 (삭제 작업 계속 진행)
+            console.warn(`HNSWLibAdapter - ID ${id} 삭제 실패 무시하고 계속 진행`);
         }
     }
 
     async save(): Promise<void> {
-        // 저장 작업을 큐에 추가하여 순차적으로 실행
         this.saveQueue = this.saveQueue.then(async () => {
             try {
                 await this.hnswIndex.writeIndex(this.indexFileName);
@@ -147,36 +171,85 @@ export class HNSWLibAdapter implements IVectorDB {
     }
 
     async saveMaps(): Promise<void> {
-		const saveIdToVector = JSON.stringify(Object.fromEntries(this.getIdToVectorMap()), null, 2);
+        const saveData = {
+            idToVector: Object.fromEntries(this.idToVectorMap),
+            deletedIds: Array.from(this.deletedIds)
+        };
 
-		const pluginPath = normalizePath(`${this.app.vault.configDir}/plugins/Chumsa`);
-		
-		try {
-			await this.app.vault.adapter.write(`${pluginPath}/ID_TO_VECTOR.json`, saveIdToVector);
-			console.log("HNSWLibAdapter - 맵 저장 완료");
-		} catch (error) {
-			console.error("HNSWLibAdapter - 맵 저장 실패:", error);
-			throw error;
-		}
+        const pluginPath = normalizePath(`${this.app.vault.configDir}/plugins/Chumsa`);
+        
+        try {
+            await this.app.vault.adapter.write(
+                `${pluginPath}/ID_TO_VECTOR.json`, 
+                JSON.stringify(saveData, null, 2)
+            );
+            console.log(`HNSWLibAdapter - 맵 저장 완료 (활성: ${this.idToVectorMap.size}, 삭제: ${this.deletedIds.size})`);
+        } catch (error) {
+            console.error("HNSWLibAdapter - 맵 저장 실패:", error);
+            throw error;
+        }
     }
 
     async loadMaps(): Promise<void> {
         const mapPath = normalizePath(`${this.app.vault.configDir}/plugins/Chumsa/ID_TO_VECTOR.json`);
         try {
-            const idToVectorString = await this.app.vault.adapter.read(mapPath);
+            const dataString = await this.app.vault.adapter.read(mapPath);
+            const data = JSON.parse(dataString);
 
-            const idToVectorObj = JSON.parse(idToVectorString);
+            if (data.idToVector) {
+                this.idToVectorMap = new Map(
+                    Object.entries(data.idToVector).map(([key, value]) => [Number(key), value as number[]])
+                );
+                this.deletedIds = new Set(data.deletedIds || []);
+            } else {
+                this.idToVectorMap = new Map(
+                    Object.entries(data).map(([key, value]) => [Number(key), value as number[]])
+                );
+                this.deletedIds.clear();
+            }
 
-            this.idToVectorMap = new Map(
-                Object.entries(idToVectorObj).map(([key, value]) => [Number(key), value as number[]])
-            );
+            // 🔧 HNSW 인덱스와 동기화 검증
+            await this.validateSync();
+
+            console.log(`HNSWLibAdapter - 맵 로드 완료 (활성: ${this.idToVectorMap.size}, 삭제: ${this.deletedIds.size})`);
         } catch (error) {
+            console.warn("HNSWLibAdapter - 맵 로드 실패, 초기화:", error);
             this.idToVectorMap.clear();
+            this.deletedIds.clear();
         }
     }
 
-    async resetMap() {
+    private async validateSync(): Promise<void> {
+        try {
+            const idLabels = this.hnswIndex.getUsedLabels();
+            const indexIds = new Set(idLabels);
+
+            // 맵에는 있지만 인덱스에는 없는 ID 찾기
+            const orphanedIds: number[] = [];
+            for (const [id] of this.idToVectorMap) {
+                if (!indexIds.has(id)) {
+                    orphanedIds.push(id);
+                }
+            }
+
+            if (orphanedIds.length > 0) {
+                console.warn(`HNSWLibAdapter - 맵에만 존재하는 ID ${orphanedIds.length}개 발견, 정리 중...`);
+                for (const id of orphanedIds) {
+                    this.idToVectorMap.delete(id);
+                    this.deletedIds.add(id);
+                }
+            }
+
+            console.log(`HNSWLibAdapter - 동기화 검증 완료 (HNSW: ${indexIds.size}개, 맵: ${this.idToVectorMap.size}개)`);
+        } catch (error) {
+            console.warn("HNSWLibAdapter - 동기화 검증 실패:", error);
+        }
+    }
+
+    async resetMap(): Promise<void> {
         this.idToVectorMap.clear();
+        this.deletedIds.clear();
+        
         const mapPath = normalizePath(`${this.app.vault.configDir}/plugins/Chumsa/ID_TO_VECTOR.json`);
         const isExist = await this.app.vault.adapter.exists(mapPath);
         if (isExist) {
@@ -189,22 +262,36 @@ export class HNSWLibAdapter implements IVectorDB {
     }
 
     async resetIndex(maxElements: number, dimensions: number): Promise<void> {
-        const exists = this.hnswlib.EmscriptenFileSystemManager.checkFileExists(this.indexFileName);    
-
         this.hnswIndex = new this.hnswlib.HierarchicalNSW('cosine', dimensions, this.indexFileName);
         await syncFileSystem('read');
         this.hnswIndex.initIndex(maxElements, 32, 150, 42);
         this.hnswIndex.setEfSearch(32);
         
         await this.resetMap();
-        this.save();
+        await this.save();
     }
 
-    public getIdToVectorMap() {
+    public getIdToVectorMap(): Map<number, number[]> {
         return this.idToVectorMap;
     }
 
-    public getVectorById(id: number) {
+    public getVectorById(id: number): number[] | undefined {
         return this.idToVectorMap.get(id);
+    }
+
+    public isDeleted(id: number): boolean {
+        return this.deletedIds.has(id);
+    }
+
+    public getDeletedIds(): Set<number> {
+        return new Set(this.deletedIds);
+    }
+
+    public getStats(): { active: number; deleted: number; total: number } {
+        return {
+            active: this.idToVectorMap.size,
+            deleted: this.deletedIds.size,
+            total: this.idToVectorMap.size + this.deletedIds.size
+        };
     }
 }

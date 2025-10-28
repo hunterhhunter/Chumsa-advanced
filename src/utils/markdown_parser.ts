@@ -109,7 +109,7 @@ export function parseMarkdownByHeadings (filePath: string, fileName: string, mar
         // 분할자가 있는 경우 분할자 위의 내용을 하나의 블럭으로, 나머지도 블럭화
         let prologueContent = originalLines.slice(0, splitPoints[0].index).join('\n').trim();
         if (prologueContent) {
-            const blockKey = `prologue_of_${fileName}`;
+            const blockKey = `prologue of ${fileName}`;
             const hashedKey = hashString(blockKey);
 
             result.blocks.push({id: hashedKey, key: blockKey, text: prologueContent});

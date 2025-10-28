@@ -61,3 +61,11 @@ export interface IVectorDB {
     count(): Promise<number>;
 }
 
+/**
+ * 검색 필터 설정
+ */
+export interface SearchFilterSettings {
+    vectorWeight: number;        // 벡터 유사도 가중치 (0.0 ~ 1.0)
+    tagWeight: number;           // 태그 유사도 가중치 (0.0 ~ 1.0)
+    qualityThreshold: number;    // 최소 품질 점수 (0.0 ~ 1.0)
+}

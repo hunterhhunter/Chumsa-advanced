@@ -1,6 +1,8 @@
 import esbuild from "esbuild";
 import process from "process";
-import fs from "fs/promises"; // manifest.json 복사를 위해 남겨둡니다.
+import fs from "fs/promises";
+import path from "path";
+import builtins from "builtin-modules";
 import 'dotenv/config';
 
 const banner =
@@ -13,24 +15,41 @@ if you want to view the source, please visit the github repository of this plugi
 const vaultPluginPath = process.env.OBSIDIAN_PLUGIN_PATH;
 
 if (!vaultPluginPath) {
-  console.error("Error: OBSIDIAN_PLUGIN_PATH environment variable is not set. Please create a .env file.");
+  console.error("❌ Error: OBSIDIAN_PLUGIN_PATH environment variable is not set.");
+  console.error("   Please create a .env file with OBSIDIAN_PLUGIN_PATH=<your vault path>");
   process.exit(1);
 }
 
 const prod = (process.argv[2] === "production");
 
-// [수정] esbuild context를 생성합니다.
 const context = await esbuild.context({
   banner: { js: banner },
   entryPoints: ["src/main.ts"],
   bundle: true,
-  external: ["obsidian"],
+  external: [
+    "obsidian",
+    "electron",
+    // CodeMirror 6 패키지들을 external로 추가
+    "@codemirror/autocomplete",
+    "@codemirror/collab",
+    "@codemirror/commands",
+    "@codemirror/language",
+    "@codemirror/lint",
+    "@codemirror/search",
+    "@codemirror/state",
+    "@codemirror/view",
+    // Lezer 파서 관련
+    "@lezer/common",
+    "@lezer/highlight",
+    "@lezer/lr",
+    // Node.js 내장 모듈
+    ...builtins
+  ],
   format: "cjs",
   target: "es2020",
   logLevel: "info",
   sourcemap: prod ? false : "inline",
   treeShaking: true,
-  // [핵심 수정] outfile 경로를 Vault 플러그인 폴더로 직접 지정합니다.
   outfile: `${vaultPluginPath}/main.js`,
   platform: 'node',
   define: {
@@ -38,34 +57,48 @@ const context = await esbuild.context({
   }
 });
 
-// manifest.json과 styles.css는 빌드와 별개로 복사합니다.
+/**
+ * 정적 파일을 Vault 플러그인 폴더로 복사
+ */
 async function copyStaticFiles() {
-  try {
-    await fs.copyFile("manifest.json", `${vaultPluginPath}/manifest.json`);
-    await fs.copyFile("styles.css", `${vaultPluginPath}/styles.css`);
-    console.log("✅ Static files (manifest, styles) copied to vault.");
-  } catch (e) {
-    // styles.css가 없는 것은 괜찮습니다.
-    if (e.code !== 'ENOENT' || !e.path.includes('styles.css')) {
-      console.error("Error copying static files:", e);
+  const filesToCopy = [
+    { src: "manifest.json", dest: "manifest.json", required: true },
+    { src: "src/styles.css", dest: "styles.css", required: false }
+  ];
+
+  for (const file of filesToCopy) {
+    try {
+      const destPath = path.join(vaultPluginPath, file.dest);
+      await fs.copyFile(file.src, destPath);
+      console.log(`✅ Copied: ${file.src} → ${file.dest}`);
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        if (file.required) {
+          console.error(`❌ Required file missing: ${file.src}`);
+          process.exit(1);
+        } else {
+          console.warn(`⚠️  Optional file not found: ${file.src} (skipping)`);
+        }
+      } else {
+        console.error(`❌ Error copying ${file.src}:`, error.message);
+        if (file.required) process.exit(1);
+      }
     }
   }
 }
 
-// 빌드 또는 감시 모드를 실행합니다.
+
 if (prod) {
+  // Production 빌드
   await context.rebuild();
-  await copyStaticFiles(); // 프로덕션 빌드 후 한 번 복사
-  console.log("Production build complete.");
+  await copyStaticFiles();
+  console.log("✅ Production build complete.");
   await context.dispose();
 } else {
-  // 감시 모드 시작 전, 먼저 한 번 빌드하고 파일을 복사합니다.
+  // Development watch 모드
   await context.rebuild();
   await copyStaticFiles();
   
   await context.watch();
   console.log("👀 Watching for changes...");
-  
-  // (선택사항) manifest.json이나 styles.css 파일 변경도 감시하려면
-  // chokidar 같은 라이브러리를 사용하거나 간단한 fs.watch를 추가할 수 있습니다.
 }
