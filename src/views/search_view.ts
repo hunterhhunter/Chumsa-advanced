@@ -2,6 +2,7 @@ import { ItemView, WorkspaceLeaf, TFile, Notice, normalizePath, ButtonComponent,
 import MyPlugin from "src/main";
 import { MainDataBaseSearchResult } from "src/types/structures";
 import { setupDragData, createDragPreview } from "src/utils/drag_handler";
+import { extractHeadingFromKey, cleanFileName } from "src/utils/link_generator";
 
 export const SEARCH_VIEW_TYPE = "search-view";
 
@@ -44,14 +45,14 @@ export class SearchView extends ItemView {
         const headerEl = container.createEl("div", { cls: "search-view-header" });
         headerEl.createEl("h2", { text: "관련 노트를 찾아보세요." });
 
-        // ===== 컨트롤 버튼 영역 =====
+        // 컨트롤 버튼 영역
         this.controlsContainer = container.createEl("div", { cls: "search-view-controls" });
         this.createControlButtons();
 
         // 구분선
         container.createEl("hr", { cls: "search-view-divider" });
         
-        // 결과 컨테이너 생성 및 참조 저장
+        // 결과 컨테이너 생성
         this.resultsContainer = container.createEl("div", { cls: "search-results-container" });
         
         // 초기 안내 혹은 버퍼된 결과 표시
@@ -126,6 +127,7 @@ export class SearchView extends ItemView {
             await this.createResultCard(result);
         }
     }
+
     /**
      * 외부에서 로딩 상태를 표시하기 위한 API
      */
@@ -134,7 +136,6 @@ export class SearchView extends ItemView {
         if (typeof requestId === "number") this.latestRequestId = requestId;
 
         if (!this.resultsContainer) {
-            // 뷰가 열리면 기본 안내가 표시됨
             this.lastResults = null;
             return;
         }
@@ -164,10 +165,8 @@ export class SearchView extends ItemView {
             return;
         }
 
-        // 기존 내용 제거
         this.resultsContainer.empty();
 
-        // 결과가 없는 경우
         if (results.length === 0) {
             this.showEmptyState("관련 노트를 찾을 수 없습니다.");
             console.log("검색 결과 없음");
@@ -180,7 +179,7 @@ export class SearchView extends ItemView {
 
         // 각 결과를 카드로 렌더링
         for (const result of results) {
-            this.createResultCard(result);
+            await this.createResultCard(result);
         }
 
         console.log(`검색 결과 ${results.length}개 렌더링 완료`);
@@ -201,16 +200,16 @@ export class SearchView extends ItemView {
         // 메타데이터 영역
         const metaEl = card.createEl("div", { cls: "result-meta" });
         
-        // 파일명 (굵게)
+        // 🔧 link_generator 함수 사용
+        const fileName = cleanFileName(result.metadata.fileName);
         const fileNameEl = metaEl.createEl("strong", { cls: "result-filename" });
-        fileNameEl.setText(result.metadata.fileName);
+        fileNameEl.setText(fileName);
         
-        // 구분자 및 키 정보
         metaEl.createEl("span", { text: " / ", cls: "result-separator" });
 
-        // 키 정보 (첫 번째 공백 전까지)
+        // 키 정보
         const keyParts = result.metadata.key.split('/').slice(1).join('/') || result.metadata.key;
-        const displayKey = keyParts.split('of')[0].trim(); // 공백으로 자르고 첫 번째 부분만
+        const displayKey = keyParts.split('of')[0].trim();
         
         metaEl.createEl("span", { 
             text: displayKey,
@@ -222,7 +221,6 @@ export class SearchView extends ItemView {
         const scoreEl = card.createEl("div", { cls: "result-score" });
         scoreEl.setText(`유사도: ${scorePercentage}%`);
         
-        // 점수에 따른 색상 표시
         const scoreValue = parseFloat(scorePercentage);
         let scoreClass = "score-low";
         
@@ -232,36 +230,30 @@ export class SearchView extends ItemView {
             scoreClass = "score-medium";
         }
 
-        // 점수 클래스 더하기
         scoreEl.addClass(scoreClass);
 
-        // 블록 내용 미리보기 (Markdown 렌더링)
+        // 블록 내용 미리보기
         if (result.block && result.block.text) {
             const previewEl = card.createEl("div", { cls: "result-preview" });
             
-            // 텍스트 정리 및 길이 제한
             let previewText = this.preparePreviewText(result.block.text);
             
             try {
-                // Markdown 렌더링
                 await MarkdownRenderer.render(
                     this.app,
                     previewText,
                     previewEl,
-                    result.metadata.filePath, // 소스 경로 (링크 해석용)
+                    result.metadata.filePath,
                     this
                 );
                 
-                // 렌더링된 내용을 읽기 전용으로 설정
                 previewEl.querySelectorAll('a').forEach(link => {
                     link.setAttribute('tabindex', '-1');
                 });
 
-                // 헤더 옆 링크 버튼 제거
                 previewEl.querySelectorAll('.heading-collapse-indicator').forEach(el => el.remove());
                 
             } catch (error) {
-                // 렌더링 실패 시 일반 텍스트로 표시
                 console.error('Markdown 렌더링 실패:', error);
                 previewEl.setText(previewText);
             }
@@ -269,7 +261,7 @@ export class SearchView extends ItemView {
 
         this.setupDragAndDrop(card, result);
 
-        // 클릭 이벤트 등록: 파일 열기
+        // 클릭 이벤트: 파일 열기
         this.registerDomEvent(card, "click", async () => {
             await this.handleResultClick(result);
         });
@@ -286,18 +278,23 @@ export class SearchView extends ItemView {
         this.registerDomEvent(element, 'dragstart', (event: DragEvent) => {
             if (!event.dataTransfer) return;
 
-            // 링크 데이터 설정
+            // 🔧 간단한 드래그 데이터 설정
             const linkText = setupDragData(event.dataTransfer, result, false);
             
-            // 드래그 프리뷰 이미지
+            // 🔧 프리뷰 생성 (더 안정적인 방식)
             const preview = createDragPreview(result);
-            event.dataTransfer.setDragImage(preview, 20, 20);
             
-            // 시각적 피드백
+            // 🔧 타이밍 조정 - 프리뷰가 DOM에 추가된 후 설정
+            requestAnimationFrame(() => {
+                if (event.dataTransfer) {
+                    event.dataTransfer.setDragImage(preview, 20, 20);
+                }
+            });
+            
             element.addClass('dragging');
             element.style.cursor = 'grabbing';
             
-            console.log(`[Drag] ${linkText}`);
+            console.log(`[Drag] 시작: ${linkText}`);
         });
 
         // 드래그 종료
@@ -313,24 +310,20 @@ export class SearchView extends ItemView {
     private preparePreviewText(text: string): string {
         const MAX_LENGTH = 200;
         
-        // 이미지, 임베드, 복잡한 요소 제거
         let cleaned = text
-            .replace(/!\[\[.*?\]\]/g, '')           // Obsidian 이미지
-            .replace(/!\[.*?\]\(.*?\)/g, '')        // Markdown 이미지
-            .replace(/```[\s\S]*?```/g, '[코드]')   // 코드 블록
-            .replace(/^#{1,6}\s+.*$/gm, '')         // 헤더 제거 (### 제목 등)
+            .replace(/!\[\[.*?\]\]/g, '')
+            .replace(/!\[.*?\]\(.*?\)/g, '')
+            .replace(/```[\s\S]*?```/g, '[코드]')
+            .replace(/^#{1,6}\s+.*$/gm, '')
             .replace(/\[\[.*?\|.*?\]\]/g, (match) => {
-                // 내부 링크: [[파일|표시텍스트]] → 표시텍스트만
                 const parts = match.slice(2, -2).split('|');
                 return parts[1] || parts[0];
             })
             .replace(/\[\[.*?\]\]/g, (match) => {
-                // 내부 링크: [[파일]] → 파일명만
                 return match.slice(2, -2);
             })
             .trim();
         
-        // 길이 제한 (단어 단위로 자르기)
         if (cleaned.length > MAX_LENGTH) {
             cleaned = cleaned.substring(0, MAX_LENGTH);
             const lastSpace = cleaned.lastIndexOf(' ');
@@ -340,8 +333,6 @@ export class SearchView extends ItemView {
             cleaned += '...';
         }
         
-        
-
         return cleaned;
     }
 
@@ -350,10 +341,10 @@ export class SearchView extends ItemView {
      */
     private async handleResultClick(result: MainDataBaseSearchResult): Promise<void> {
         try {
-            const heading = this.extractHeadingFromKey(result.metadata.key);
+            // 🔧 link_generator 함수 사용
+            const heading = extractHeadingFromKey(result.metadata.key);
             
             if (!heading) {
-                // 헤더 없으면 파일만 열기
                 await this.app.workspace.openLinkText(
                     result.metadata.filePath,
                     "",
@@ -363,16 +354,15 @@ export class SearchView extends ItemView {
                 return;
             }
 
-            // 🔧 Obsidian 내장 API로 파일#헤더 형식 링크 열기
             const linkText = `${result.metadata.filePath}#${heading}`;
             
             console.log(`[SearchView] 링크로 이동: ${linkText}`);
             
             await this.app.workspace.openLinkText(
                 linkText,
-                "",           // sourcePath (현재 파일 경로, 빈 문자열 가능)
-                false,        // newLeaf (false = 현재 탭에서 열기)
-                { active: true }  // state
+                "",
+                false,
+                { active: true }
             );
 
             console.log(`[SearchView] ✅ 이동 완료`);
@@ -382,24 +372,6 @@ export class SearchView extends ItemView {
             console.error("[SearchView] 파일 열기 실패:", errorMsg);
             new Notice(`파일을 여는 중 오류: ${errorMsg}`);
         }
-    }
-
-    /**
-     * metadata.key에서 헤더 텍스트 추출
-     * 예: "vault/path/### 헤더 제목 of file.md" → "헤더 제목"
-     */
-    private extractHeadingFromKey(key: string): string | null {
-        // 경로에서 마지막 부분만 추출
-        const keyParts = key.split('/');
-        const lastPart = keyParts[keyParts.length - 1];
-        
-        // " of " 앞부분만 추출
-        const beforeOf = lastPart.split(' of ')[0];
-        
-        // ### 같은 헤더 마커 제거
-        const cleaned = beforeOf.replace(/^#{1,6}\s+/, '').trim();
-        
-        return cleaned || null;
     }
 
     /**
@@ -448,7 +420,6 @@ export class SearchView extends ItemView {
         }
 
         try {
-            // 인덱싱 전 상태 확인
             const fileBlocks = await this.plugin.documentService.database.getFileBlockIds(file.path);
 
             const startTime = Date.now();
@@ -463,7 +434,7 @@ export class SearchView extends ItemView {
                 );
             } else {
                 new Notice(`인덱싱 시작: ${file.name}`);
-                    await this.plugin.documentService.saveOneDocument(
+                await this.plugin.documentService.saveOneDocument(
                     file.path,
                     this.plugin.settings.spliter
                 );
@@ -495,17 +466,13 @@ export class SearchView extends ItemView {
         try {
             new Notice("데이터베이스 초기화 중...");
             
-            // DocumentService에 resetDatabase 메서드가 있다고 가정
-            // 없다면 직접 database.initialize()를 호출
             if (typeof this.plugin.documentService.resetDatabase === 'function') {
                 await this.plugin.documentService.resetDatabase();
             } else {
-                // fallback: 직접 초기화
                 this.plugin.documentService = null;
                 await this.plugin['tryInitializeDocumentService'](true);
             }
             
-            // 결과 화면 초기화
             this.showEmptyState("데이터베이스가 초기화되었습니다.");
             new Notice("✅ 데이터베이스 초기화 완료");
         } catch (error) {
