@@ -1,20 +1,21 @@
 import { App, normalizePath, TFile } from "obsidian";
 import { MainDataBase } from "./main_database";
-import { EmbedModel } from "./embed_model";
 import { parseMarkdownByHeadings } from "src/utils/markdown_parser";
 import { hashString } from "src/utils/hash_func";
+import { LLMService } from "./llm_service";
+import { AutoTagOptions, AutoTagResponse, AutoTagResult } from "src/types/structures";
 
 export class DocumentService {
     private app: App;
     public database: MainDataBase;
-    private embedModel: EmbedModel;
+    private llmService: LLMService;
 
     constructor(app: App, apiKey: string, indexFileName: string) {
         this.app = app;
         this.database = new MainDataBase(app);
         this.database.initialize(indexFileName, 1536, 10000);
 
-        this.embedModel = new EmbedModel(apiKey);
+        this.llmService = new LLMService(apiKey);
     }
     
     // 한 문서 저장 함수
@@ -28,7 +29,7 @@ export class DocumentService {
         const blocks = parseMarkdownByHeadings(filePath, fileName, content, spliter);
 
         // --- 3. 블럭별로 임베딩 --- 
-        const embededData = await this.embedModel.embeddingBlocks(blocks);
+        const embededData = await this.llmService.embeddingBlocks(blocks);
 
         // --- 4. 임베딩 결과 저장 --
         await this.database.addItems(blocks, embededData);
@@ -82,7 +83,7 @@ export class DocumentService {
             }
 
             // 4. 임베딩 생성
-            const embeddedData = await this.embedModel.embeddingBlocks(blocks);
+            const embeddedData = await this.llmService.embeddingBlocks(blocks);
 
             // 5. 새 블록 추가
             await this.database.addItems(blocks, embeddedData);
@@ -141,5 +142,157 @@ export class DocumentService {
 
     public async resetDatabase(): Promise<void> {
         this.database.resetDatabase();
+    }
+
+    public async generateAutoTags(
+        filePath: string,
+        options?: AutoTagOptions
+    ): Promise<AutoTagResponse> {
+        const normalizedPath = normalizePath(filePath);
+        const file = this.app.vault.getAbstractFileByPath(normalizedPath);
+        
+        if (!(file instanceof TFile)) {
+            throw new Error(`파일을 찾을 수 없습니다: ${filePath}`);
+        }
+
+        try {
+            // 파일 내용 읽기
+            const content = await this.app.vault.read(file);
+            const fileName = file.basename;
+
+            console.log(`[DocumentService] 자동 태그 생성 시작: ${fileName}`);
+
+            // LLM을 통한 태그 생성
+            const response = await this.llmService.generateAutoTags(
+                content,
+                fileName,
+                options
+            );
+
+            console.log(
+                `[DocumentService] ✅ 자동 태그 생성 완료: ${fileName} - ` +
+                `${response.tags.length}개 태그 (신뢰도: ${(response.confidence || 0) * 100}%)`
+            );
+
+            return response;
+
+        } catch (error) {
+            console.error(`[DocumentService] 자동 태그 생성 실패: ${filePath}`, error);
+            throw new Error(`자동 태그 생성 중 오류 발생: ${error.message}`);
+        }
+    }
+
+    public async generateAndApplyAutoTags(
+        filePath: string,
+        options?: AutoTagOptions
+    ): Promise<AutoTagResult> {
+        const normalizedPath = normalizePath(filePath);
+        const file = this.app.vault.getAbstractFileByPath(normalizedPath);
+        
+        if (!(file instanceof TFile)) {
+            throw new Error(`파일을 찾을 수 없습니다: ${filePath}`);
+        }
+
+        try {
+            // 1. 자동 태그 생성
+            const response = await this.generateAutoTags(normalizedPath, options);
+
+            // 2. 기존 태그 읽기
+            const existingTags = await this.getExistingTags(file);
+
+            // 3. 새로운 태그만 필터링
+            const addedTags = response.tags.filter(
+                tag => !existingTags.includes(tag)
+            );
+
+            // 4. Frontmatter에 태그 추가
+            if (addedTags.length > 0) {
+                await this.addTagsToFrontmatter(file, addedTags);
+                console.log(
+                    `[DocumentService] ✅ 태그 적용 완료: ${file.basename} - ` +
+                    `${addedTags.length}개 추가 (${addedTags.join(', ')})`
+                );
+            } else {
+                console.log(`[DocumentService] 추가할 새 태그 없음: ${file.basename}`);
+            }
+
+            return {
+                filePath: normalizedPath,
+                fileName: file.basename,
+                generatedTags: response.tags,
+                existingTags,
+                addedTags,
+                confidence: response.confidence
+            };
+
+        } catch (error) {
+            console.error(`[DocumentService] 자동 태그 적용 실패: ${filePath}`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * 파일의 기존 태그 읽기
+     */
+    private async getExistingTags(file: TFile): Promise<string[]> {
+        const cache = this.app.metadataCache.getFileCache(file);
+        const frontmatter = cache?.frontmatter;
+
+        if (!frontmatter || !frontmatter.tags) {
+            return [];
+        }
+
+        // 태그가 문자열인 경우
+        if (typeof frontmatter.tags === 'string') {
+            return [frontmatter.tags];
+        }
+
+        // 태그가 배열인 경우
+        return Array.isArray(frontmatter.tags) ? frontmatter.tags : [];
+    }
+
+    /**
+     * Frontmatter에 태그 추가 (기존 태그 유지)
+     */
+    private async addTagsToFrontmatter(
+        file: TFile,
+        newTags: string[]
+    ): Promise<void> {
+        let content = await this.app.vault.read(file);
+        const existingTags = await this.getExistingTags(file);
+
+        // 중복 제거 후 병합
+        const allTags = Array.from(new Set([...existingTags, ...newTags]));
+
+        // Frontmatter 업데이트
+        const tagsYaml = `tags:\n${allTags.map(tag => `  - ${tag}`).join('\n')}`;
+
+        if (content.startsWith('---')) {
+            // 기존 frontmatter 수정
+            const frontmatterEnd = content.indexOf('---', 3);
+            if (frontmatterEnd !== -1) {
+                let frontmatter = content.substring(3, frontmatterEnd);
+
+                // 기존 tags 필드 제거
+                frontmatter = frontmatter.replace(
+                    /tags:[\s\S]*?(?=\n[a-z_]|\n---|\n$)/i,
+                    ''
+                );
+
+                // 새 tags 추가
+                const updatedFrontmatter = frontmatter.trim() + '\n' + tagsYaml;
+                content = `---\n${updatedFrontmatter}\n---` + content.substring(frontmatterEnd + 3);
+            }
+        } else {
+            // Frontmatter 새로 생성
+            content = `---\n${tagsYaml}\n---\n\n${content}`;
+        }
+
+        await this.app.vault.modify(file, content);
+    }
+
+    // API 키 업데이트 메서드
+    updateApiKey(apiKey: string): void {
+        this.llmService.updateApiKey(apiKey);
     }
 }

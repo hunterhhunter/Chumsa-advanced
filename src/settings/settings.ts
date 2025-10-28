@@ -6,6 +6,10 @@ export interface ChumsaSettings {
     spliter: string;
     indexFileName: string;
     headingLevel: HeadingLevel;
+
+    // 자동 태그 설정
+    autoTagMaxTags: number;
+    autoTagLanguage: string;
 }
 
 export const HEADING_CONFIGS: Record<HeadingLevel, { tag: HeadingLevel; splitter: string; label: string }> = {
@@ -26,4 +30,8 @@ export const DEFAULT_SETTINGS: ChumsaSettings = {
     spliter: "### ",           // 기존 필드 유지
     indexFileName: "indexFile",
     headingLevel: 'h3',        // 신규: 기본값 H3
+
+    // 자동 태그 기본값
+    autoTagMaxTags: 8,
+    autoTagLanguage: 'ko',
 };

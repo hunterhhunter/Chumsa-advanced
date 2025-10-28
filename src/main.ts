@@ -121,7 +121,7 @@ export default class MyPlugin extends Plugin {
 
             console.log(`원본 검색 결과: ${rawResults.length}개`);
 
-            // 쿼리에서 태그 추출
+            // 쿼리에서 자동 태그
             const queryTags = this.searchFilter.extractTagsFromText(clickLineText);
 
             // 품질 필터링 적용

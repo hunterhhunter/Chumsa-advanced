@@ -1,32 +1,56 @@
+/* ============================================================
+   Chumsa-advanced Plugin Styles
+   Obsidian Vector Search Plugin
+   ============================================================ */
+
 /* ===== 편집 모드 검색 아이콘 ===== */
 .cm-search-icon {
-    display: inline-block !important;
-    vertical-align: middle;
-    margin-left: 0.5em;
-    opacity: 0.5;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    margin-left: 6px;
+    padding: 2px;
+    border-radius: 3px;
+    opacity: 0.4;
     cursor: pointer;
-    transition: opacity 0.2s ease;
+    transition: all 0.2s ease;
+    vertical-align: middle;
 }
 
 .cm-search-icon:hover {
     opacity: 1 !important;
+    background-color: var(--background-modifier-hover);
+    color: var(--text-accent);
 }
 
 .cm-search-icon svg {
-    width: 16px;
-    height: 16px;
-    vertical-align: middle;
+    width: 14px;
+    height: 14px;
 }
 
-/* ===== SearchView 레이아웃 ===== */
+/* ===== SearchView 최상위 레이아웃 ===== */
+
+/* Obsidian contentEl wrapper */
+.chumsa-side-view-wrapper {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    position: relative;
+}
+
+/* Flexbox 메인 컨테이너 */
 .chumsa-side-view {
     height: 100%;
+    width: 100%;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    background: var(--background-primary);
 }
 
-/* 헤더 영역 (고정) */
+/* ===== 헤더 영역 (고정) ===== */
 .search-view-header {
     flex-shrink: 0;
     padding: 16px;
@@ -36,12 +60,13 @@
 
 .search-view-header h2 {
     margin: 0;
-    font-size: 1.2em;
+    font-size: 18px;
     font-weight: 600;
     color: var(--text-normal);
+    line-height: 1.3;
 }
 
-/* 컨트롤 버튼 영역 (고정) */
+/* ===== 컨트롤 버튼 영역 (고정) ===== */
 .search-view-controls {
     flex-shrink: 0;
     padding: 12px 16px;
@@ -57,108 +82,129 @@
 
 .control-buttons-row button {
     flex: 1;
-    min-width: 120px;
+    min-width: 90px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
     background: var(--interactive-normal);
     color: var(--text-on-accent);
+    border: none;
+    outline: none;
 }
 
 .control-buttons-row button:hover {
     background: var(--interactive-hover);
+    transform: translateY(-1px);
+}
+
+.control-buttons-row button:active {
+    transform: translateY(0);
 }
 
 .control-buttons-row button.mod-warning {
     background: var(--color-red);
+    color: white;
 }
 
 .control-buttons-row button.mod-warning:hover {
-    background: var(--color-red-rgb);
-    opacity: 0.8;
+    background: color-mix(in srgb, var(--color-red) 85%, black);
 }
 
-/* 검색 결과 컨테이너 (스크롤 가능) */
+/* ===== 검색 결과 컨테이너 (스크롤 가능) ===== */
 .search-results-container {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
     padding: 16px;
-    min-height: 0;
+    min-height: 0; /* ⚠️ Flexbox 스크롤 필수 속성 */
     background: var(--background-primary);
 }
 
-/* 스크롤바 커스터마이징 */
+/* 스크롤바 스타일 */
 .search-results-container::-webkit-scrollbar {
     width: 8px;
 }
 
 .search-results-container::-webkit-scrollbar-track {
-    background: var(--background-primary-alt);
-}
-
-.search-results-container::-webkit-scrollbar-thumb {
-    background: var(--background-modifier-border-hover);
+    background: var(--background-secondary);
     border-radius: 4px;
 }
 
+.search-results-container::-webkit-scrollbar-thumb {
+    background: var(--background-modifier-border);
+    border-radius: 4px;
+    transition: background 0.2s ease;
+}
+
 .search-results-container::-webkit-scrollbar-thumb:hover {
-    background: var(--background-modifier-border-focus);
+    background: var(--text-faint);
 }
 
 /* ===== 검색 결과 헤더 ===== */
 .search-results-header {
-    margin-bottom: 12px;
+    margin-bottom: 16px;
     padding-bottom: 8px;
     border-bottom: 1px solid var(--background-modifier-border);
 }
 
 .search-results-header h3 {
     margin: 0;
-    font-size: 0.95em;
-    font-weight: 500;
+    font-size: 14px;
+    font-weight: 600;
     color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 /* ===== 검색 결과 카드 ===== */
 .search-result-card {
+    position: relative;
     margin-bottom: 12px;
-    padding: 12px;
-    background: var(--background-secondary);
+    padding: 14px;
+    background: var(--background-primary-alt);
     border: 1px solid var(--background-modifier-border);
-    border-radius: var(--radius-m);
-    cursor: grab;
+    border-radius: 6px;
+    cursor: pointer;
     transition: all 0.2s ease;
+    overflow: hidden;
 }
 
 .search-result-card:hover {
     background: var(--background-modifier-hover);
     border-color: var(--interactive-accent);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     transform: translateY(-2px);
-    box-shadow: var(--shadow-s);
+}
+
+.search-result-card:active {
+    transform: translateY(0);
 }
 
 .search-result-card.dragging {
-    opacity: 0.5;
+    opacity: 0.6;
     border: 2px dashed var(--interactive-accent);
     cursor: grabbing;
 }
 
-/* ===== 메타데이터 영역 ===== */
+/* ===== 카드 메타데이터 ===== */
 .result-meta {
     display: flex;
     align-items: baseline;
-    gap: 4px;
-    margin-bottom: 8px;
-    font-size: 0.9em;
+    gap: 6px;
+    margin-bottom: 10px;
+    font-size: 13px;
     line-height: 1.4;
-    /* 🔧 최대 2줄로 제한 */
-    max-height: 2.8em;
-    overflow: hidden;
+    flex-wrap: wrap;
 }
 
 .result-filename {
     color: var(--text-accent);
     font-weight: 600;
-    /* 🔧 파일명 길이 제한 */
-    max-width: 40%;
+    font-size: 14px;
+    max-width: 45%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -167,35 +213,37 @@
 
 .result-separator {
     color: var(--text-faint);
+    font-weight: 300;
     flex-shrink: 0;
 }
 
 .result-key {
     color: var(--text-muted);
-    font-size: 0.85em;
-    /* 🔧 헤더명 길이 제한 */
-    max-width: 55%;
+    font-size: 12px;
+    max-width: 50%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     flex-shrink: 1;
 }
 
-/* ===== 유사도 점수 ===== */
+/* ===== 유사도 점수 배지 ===== */
 .result-score {
     display: inline-block;
-    padding: 2px 8px;
-    margin-bottom: 8px;
-    font-size: 0.75em;
-    font-weight: 600;
-    border-radius: var(--radius-s);
+    padding: 3px 10px;
+    margin-bottom: 10px;
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
     background: var(--background-modifier-border);
     color: var(--text-muted);
 }
 
 .result-score.score-high {
     background: var(--color-green);
-    color: var(--text-on-accent);
+    color: white;
 }
 
 .result-score.score-medium {
@@ -208,60 +256,86 @@
     color: var(--text-faint);
 }
 
-/* ===== 미리보기 ===== */
+/* ===== 미리보기 영역 ===== */
 .result-preview {
-    font-size: 0.85em;
+    font-size: 13px;
     line-height: 1.6;
     color: var(--text-muted);
-    margin-top: 8px;
-    padding-top: 8px;
+    margin-top: 10px;
+    padding-top: 10px;
     border-top: 1px solid var(--background-modifier-border);
-    /* 최대 3줄로 제한 */
+    
+    /* 최대 3줄 제한 */
     display: -webkit-box;
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    word-break: break-word;
 }
 
 .result-preview p {
-    margin: 0;
+    margin: 0 0 8px 0;
+}
+
+.result-preview p:last-child {
+    margin-bottom: 0;
 }
 
 .result-preview a {
-    pointer-events: none;
     color: var(--link-color);
     text-decoration: none;
+    pointer-events: none;
+}
+
+.result-preview a:hover {
+    text-decoration: underline;
 }
 
 .result-preview code {
     background: var(--code-background);
     color: var(--code-normal);
-    padding: 2px 4px;
-    border-radius: var(--radius-s);
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-family: var(--font-monospace);
 }
 
-/* ===== 상태 표시 ===== */
+.result-preview strong {
+    font-weight: 600;
+    color: var(--text-normal);
+}
+
+.result-preview em {
+    font-style: italic;
+    color: var(--text-muted);
+}
+
+/* ===== 상태 표시 (빈 상태 / 로딩 / 에러) ===== */
 .search-empty-state,
 .search-loading,
 .search-error {
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     text-align: center;
-    padding: 40px 20px;
-    min-height: 200px;
+    padding: 60px 20px;
+    min-height: 300px;
 }
 
 .search-empty-state p,
 .search-loading p,
 .search-error p {
     margin: 0;
-    font-size: 0.95em;
+    font-size: 14px;
+    line-height: 1.6;
     color: var(--text-muted);
+    max-width: 300px;
 }
 
 .search-error p {
     color: var(--text-error);
+    font-weight: 500;
 }
 
 .search-loading p {
@@ -269,37 +343,73 @@
 }
 
 @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
+    0%, 100% { 
+        opacity: 1; 
+    }
+    50% { 
+        opacity: 0.4; 
+    }
 }
 
 /* ===== 드래그 프리뷰 ===== */
 .chumsa-drag-preview {
     position: fixed;
-    top: -1000px;
-    left: -1000px;
+    top: -9999px;
+    left: -9999px;
     padding: 8px 14px;
     background: var(--background-primary);
     border: 1px solid var(--interactive-accent);
-    border-radius: var(--radius-m);
+    border-radius: 6px;
     font-family: var(--font-interface);
     font-size: 12px;
     font-weight: 500;
     color: var(--text-normal);
-    opacity: 0.9;
-    max-width: 300px;
+    opacity: 0.95;
+    max-width: 350px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    box-shadow: var(--shadow-s);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     pointer-events: none;
     z-index: 9999;
 }
 
-/* ===== 모바일 대응 ===== */
+/* ===== 애니메이션 ===== */
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.search-result-card {
+    animation: slideIn 0.3s ease-out;
+}
+
+/* 순차 애니메이션 (첫 10개 카드) */
+.search-result-card:nth-child(1) { animation-delay: 0s; }
+.search-result-card:nth-child(2) { animation-delay: 0.05s; }
+.search-result-card:nth-child(3) { animation-delay: 0.1s; }
+.search-result-card:nth-child(4) { animation-delay: 0.15s; }
+.search-result-card:nth-child(5) { animation-delay: 0.2s; }
+.search-result-card:nth-child(6) { animation-delay: 0.25s; }
+.search-result-card:nth-child(7) { animation-delay: 0.3s; }
+.search-result-card:nth-child(8) { animation-delay: 0.35s; }
+.search-result-card:nth-child(9) { animation-delay: 0.4s; }
+.search-result-card:nth-child(10) { animation-delay: 0.45s; }
+
+/* ===== 반응형 디자인 (모바일) ===== */
 @media (max-width: 768px) {
     .search-view-header {
         padding: 12px;
+    }
+
+    .search-view-header h2 {
+        font-size: 16px;
     }
 
     .search-view-controls {
@@ -311,26 +421,122 @@
     }
 
     .search-result-card {
-        padding: 10px;
+        padding: 12px;
     }
 
-    .result-filename {
-        max-width: 35%;
+    .result-meta {
+        flex-direction: column;
+        gap: 4px;
     }
 
+    .result-filename,
     .result-key {
-        max-width: 60%;
+        max-width: 100%;
+    }
+
+    .result-separator {
+        display: none;
     }
 
     .result-preview {
+        font-size: 12px;
         -webkit-line-clamp: 2;
     }
 
     .control-buttons-row button {
-        min-width: 100px;
-        font-size: 0.9em;
+        min-width: 80px;
+        font-size: 12px;
+        padding: 6px 10px;
+    }
+
+    .search-empty-state,
+    .search-loading,
+    .search-error {
+        padding: 40px 20px;
+        min-height: 200px;
     }
 }
 
-/* ===== 다크/라이트 모드 자동 대응 ===== */
-/* Obsidian CSS 변수를 사용하므로 테마 변경 시 자동 적용됨 */
+@media (max-width: 480px) {
+    .search-view-header {
+        padding: 10px;
+    }
+
+    .search-view-controls {
+        padding: 8px 10px;
+    }
+
+    .search-results-container {
+        padding: 10px;
+    }
+
+    .control-buttons-row {
+        gap: 6px;
+    }
+
+    .control-buttons-row button {
+        min-width: 70px;
+        font-size: 11px;
+    }
+}
+
+/* ===== 다크 모드 추가 스타일 ===== */
+.theme-dark .search-result-card {
+    box-shadow: none;
+}
+
+.theme-dark .search-result-card:hover {
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+
+.theme-dark .chumsa-drag-preview {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* ===== 라이트 모드 추가 스타일 ===== */
+.theme-light .search-result-card {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.theme-light .search-result-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* ===== 접근성 개선 ===== */
+.control-buttons-row button:focus-visible,
+.search-result-card:focus-visible {
+    outline: 2px solid var(--interactive-accent);
+    outline-offset: 2px;
+}
+
+/* 키보드 네비게이션 힌트 */
+.search-result-card[data-keyboard-selected="true"] {
+    border-color: var(--interactive-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--interactive-accent) 20%, transparent);
+}
+
+/* ===== 성능 최적화 ===== */
+.search-result-card,
+.control-buttons-row button,
+.cm-search-icon {
+    will-change: transform;
+}
+
+/* 하드웨어 가속 활성화 */
+.search-results-container {
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+}
+
+/* ===== 인쇄 스타일 ===== */
+@media print {
+    .search-view-controls,
+    .cm-search-icon {
+        display: none !important;
+    }
+
+    .search-result-card {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+}

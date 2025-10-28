@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, TFile, Notice, normalizePath, ButtonComponent, MarkdownRenderer, MarkdownView } from "obsidian";
+import { ItemView, WorkspaceLeaf, TFile, Notice, normalizePath, ButtonComponent, MarkdownRenderer, MarkdownView, setIcon } from "obsidian";
 import MyPlugin from "src/main";
 import { MainDataBaseSearchResult } from "src/types/structures";
 import { setupDragData, createDragPreview } from "src/utils/drag_handler";
@@ -10,6 +10,7 @@ export class SearchView extends ItemView {
     private resultsContainer: HTMLElement | null = null;
     private controlsContainer: HTMLElement | null = null;
     private plugin: MyPlugin;
+    private mainContainer: HTMLElement | null = null;
 
     // 레이스 컨디션 방지용 ID
     private latestRequestId = 0;
@@ -36,24 +37,22 @@ export class SearchView extends ItemView {
     }
     
     async onOpen(): Promise<void> {
-        this.containerEl.addClass('chumsa-side-view');
+        this.contentEl.empty();
+        this.contentEl.addClass('chumsa-side-view-wrapper');
 
-        const container = this.contentEl;
-        container.empty();
+        // 🔧 Flexbox 레이아웃을 위한 메인 컨테이너 생성
+        this.mainContainer = this.contentEl.createEl("div", { cls: "chumsa-side-view" });
         
-        // 헤더 영역
-        const headerEl = container.createEl("div", { cls: "search-view-header" });
+        // 헤더 영역 (고정)
+        const headerEl = this.mainContainer.createEl("div", { cls: "search-view-header" });
         headerEl.createEl("h2", { text: "관련 노트를 찾아보세요." });
 
-        // 컨트롤 버튼 영역
-        this.controlsContainer = container.createEl("div", { cls: "search-view-controls" });
+        // 컨트롤 버튼 영역 (고정)
+        this.controlsContainer = this.mainContainer.createEl("div", { cls: "search-view-controls" });
         this.createControlButtons();
-
-        // 구분선
-        container.createEl("hr", { cls: "search-view-divider" });
         
-        // 결과 컨테이너 생성
-        this.resultsContainer = container.createEl("div", { cls: "search-results-container" });
+        // 결과 컨테이너 (스크롤 가능)
+        this.resultsContainer = this.mainContainer.createEl("div", { cls: "search-results-container" });
         
         // 초기 안내 혹은 버퍼된 결과 표시
         if (this.lastResults && this.lastResults.length > 0) {
@@ -78,7 +77,15 @@ export class SearchView extends ItemView {
                 await this.indexCurrentFile();
             });
 
-        // 버튼 2: 인덱스 초기화
+        // 버튼 2: 자동 태그 생성
+        new ButtonComponent(buttonsRow)
+            .setButtonText("🏷️ 자동 태그")
+            .setTooltip("현재 파일에 자동으로 태그를 생성합니다")
+            .onClick(async () => {
+                await this.generateAutoTags();
+            });
+
+        // 버튼 3: 인덱스 초기화
         new ButtonComponent(buttonsRow)
             .setButtonText("🗑️ 초기화")
             .setTooltip("인덱스를 초기화합니다")
@@ -90,6 +97,8 @@ export class SearchView extends ItemView {
 
     async onClose(): Promise<void> {
         this.resultsContainer = null;
+        this.controlsContainer = null;
+        this.mainContainer = null;
         this.lastResults = null;
         this.latestRequestId = 0;
     }
@@ -479,6 +488,54 @@ export class SearchView extends ItemView {
             console.error("데이터베이스 초기화 실패:", error);
             const errorMsg = error instanceof Error ? error.message : "알 수 없는 오류";
             new Notice(`❌ 초기화 실패: ${errorMsg}`);
+        }
+    }
+
+    /**
+     * 자동 태그 생성
+     */
+    private async generateAutoTags(): Promise<void> {
+        const activeFile = this.app.workspace.getActiveFile();
+        if (!activeFile) {
+            new Notice("열린 파일이 없습니다.");
+            return;
+        }
+
+        if (!this.plugin.documentService) {
+            new Notice("먼저 설정에서 DocumentService를 초기화하세요.");
+            return;
+        }
+
+        try {
+            new Notice(`"${activeFile.basename}" 자동 태그 생성 중...`);
+
+            const result = await this.plugin.documentService.generateAndApplyAutoTags(
+                activeFile.path,
+                {
+                    maxTags: this.plugin.settings.autoTagMaxTags || 8,
+                    language: this.plugin.settings.autoTagLanguage || 'ko',
+                    includeReasoning: false
+                }
+            );
+
+            if (result.addedTags.length > 0) {
+                new Notice(
+                    `✅ ${result.addedTags.length}개 태그 추가됨\n${result.addedTags.join(', ')}`,
+                    5000
+                );
+            } else {
+                new Notice(
+                    `ℹ️ 추가할 새 태그가 없습니다\n생성된 태그: ${result.generatedTags.join(', ')}`,
+                    4000
+                );
+            }
+
+            console.log('[SearchView] 자동 태그 결과:', result);
+
+        } catch (error) {
+            console.error("자동 태그 생성 실패:", error);
+            const errorMsg = error instanceof Error ? error.message : "알 수 없는 오류";
+            new Notice(`❌ 자동 태그 생성 실패: ${errorMsg}`);
         }
     }
 }

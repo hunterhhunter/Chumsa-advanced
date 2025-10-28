@@ -120,7 +120,7 @@ export class SearchFilter {
     }
 
     /**
-     * 텍스트에서 태그 추출 (#태그 형식)
+     * 텍스트에서 자동 태그 (#태그 형식)
      */
     extractTagsFromText(text: string): string[] {
         // TODO: 구현 필요
@@ -128,7 +128,7 @@ export class SearchFilter {
     }
 
     /**
-     * 파일 캐시에서 태그 추출 (프론트매터 + 인라인)
+     * 파일 캐시에서 자동 태그 (프론트매터 + 인라인)
      */
     private extractTagsFromCache(fileCache: CachedMetadata | null): string[] {
         // TODO: 구현 필요
