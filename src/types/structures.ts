@@ -68,6 +68,7 @@ export interface SearchFilterSettings {
     vectorWeight: number;        // 벡터 유사도 가중치 (0.0 ~ 1.0)
     tagWeight: number;           // 태그 유사도 가중치 (0.0 ~ 1.0)
     qualityThreshold: number;    // 최소 품질 점수 (0.0 ~ 1.0)
+    excludeSameFile: boolean;
 }
 
 /**
@@ -116,7 +117,6 @@ export interface TextGenerationOptions {
 export interface ILLMService {
     // 임베딩 관련
     embeddingOneText(text: string): Promise<number[]>;
-    embeddingBlock(block: MdHeaddingBlock): Promise<EmbededData>;
     embeddingBlocks(blocks: MdBlocks): Promise<EmbededData[]>;
     
     // 자동 태그 생성
@@ -127,4 +127,13 @@ export interface ILLMService {
     
     // 유틸리티
     updateApiKey(apiKey: string): void;
+}
+
+/**
+ * AI 채팅 메시지
+ */
+export interface ChatMessage {
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+    timestamp?: number;
 }

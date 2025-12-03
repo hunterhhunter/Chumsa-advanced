@@ -1,4 +1,4 @@
-import { App, normalizePath, TFile } from "obsidian";
+import { App, normalizePath, Notice, TFile } from "obsidian";
 import { MainDataBase } from "./main_database";
 import { parseMarkdownByHeadings } from "src/utils/markdown_parser";
 import { hashString } from "src/utils/hash_func";
@@ -8,7 +8,7 @@ import { AutoTagOptions, AutoTagResponse, AutoTagResult } from "src/types/struct
 export class DocumentService {
     private app: App;
     public database: MainDataBase;
-    private llmService: LLMService;
+    public llmService: LLMService;
 
     constructor(app: App, apiKey: string, indexFileName: string) {
         this.app = app;
@@ -18,22 +18,60 @@ export class DocumentService {
         this.llmService = new LLMService(apiKey);
     }
     
-    // 한 문서 저장 함수
+    /**
+     * 한 문서 저장 함수
+     */
     public async saveOneDocument(filePath: string, spliter: string = "### ") {
-        // --- 1. 파일 읽어오기 ---
-        const nomalizedPath = normalizePath(filePath)
-        const content = await this.app.vault.adapter.read(nomalizedPath);
-        const fileName = filePath.split('/').pop()!;
+        const normalizedPath = normalizePath(filePath);
+        const file = this.app.vault.getAbstractFileByPath(normalizedPath);
 
-        // --- 2. 마크다운 파싱 ---
-        const blocks = parseMarkdownByHeadings(filePath, fileName, content, spliter);
+        if (!(file instanceof TFile)) {
+            console.error(`[DocumentService] 파일을 찾을 수 없음: ${filePath}`);
+            return;
+        }
 
-        // --- 3. 블럭별로 임베딩 --- 
-        const embededData = await this.llmService.embeddingBlocks(blocks);
+        try {
+            const content = await this.app.vault.read(file);
+            const fileName = file.basename;
 
-        // --- 4. 임베딩 결과 저장 --
-        await this.database.addItems(blocks, embededData);
-        this.database.printAllBlocksbyFilePath(filePath);
+            console.log(`[DocumentService] 문서 파싱 시작: ${fileName}`);
+            const blocks = parseMarkdownByHeadings(
+                normalizedPath,
+                fileName,
+                content,
+                spliter
+            );
+
+            // 🔧 빈 블록 체크
+            if (!blocks.blocks || blocks.blocks.length === 0) {
+                console.warn(`[DocumentService] ${fileName}: 파싱된 블록이 없습니다`);
+                new Notice(`⚠️ "${fileName}": 인덱싱할 내용이 없습니다`);
+                return;
+            }
+
+            console.log(`[DocumentService] ${fileName}: ${blocks.blocks.length}개 블록 파싱 완료`);
+
+            // 임베딩 생성
+            const embededData = await this.llmService.embeddingBlocks(blocks);
+
+            // 🔧 임베딩 실패 체크
+            if (!embededData || embededData.length === 0) {
+                console.warn(`[DocumentService] ${fileName}: 임베딩 생성 실패 (빈 결과)`);
+                new Notice(`⚠️ "${fileName}": 임베딩 생성 실패`);
+                return;
+            }
+
+            console.log(`[DocumentService] ${fileName}: ${embededData.length}개 임베딩 생성 완료`);
+
+            // DB에 저장
+            await this.database.addItems(blocks, embededData);
+
+            console.log(`[DocumentService] ✅ ${fileName} 저장 완료`);
+
+        } catch (error) {
+            console.error(`[DocumentService] ${file.basename} 저장 실패:`, error);
+            throw error; // 상위로 전파
+        }
     }
 
     /**
@@ -106,16 +144,59 @@ export class DocumentService {
         }
     }
 
-    // Vault 전체 순회 및 저장 함수
+    /**
+     * Vault 전체 순회 및 저장 함수
+     */
     public async saveVault(allFilePaths: TFile[], batchSize: number = 10, spliter: string = "### ") {
-        console.log
-        // batchSize만큼 saveOneDocument 병렬처리
+        console.log(`[DocumentService] 전체 임베딩 시작: ${allFilePaths.length}개 파일`);
+
+        let successCount = 0;
+        let failCount = 0;
+        const failedFiles: string[] = [];
+
         for (let i = 0; i < allFilePaths.length; i += batchSize) {
-            const batch = allFilePaths.slice(i, i+batchSize);
-            console.log(`HIHIHIHIHIHIHIH----------: ${batch.toString()}`);
-            const savePromise = batch.map(filePath => this.saveOneDocument(filePath.path, spliter));
-            await Promise.all(savePromise);
+            const batch = allFilePaths.slice(i, i + batchSize);
+            
+            console.log(
+                `[DocumentService] 배치 ${Math.floor(i / batchSize) + 1}/${Math.ceil(allFilePaths.length / batchSize)}: ` +
+                `${batch.map(f => f.basename).join(', ')}`
+            );
+
+            // 🔧 Promise.allSettled로 에러 격리
+            const results = await Promise.allSettled(
+                batch.map(file => this.saveOneDocument(file.path, spliter))
+            );
+
+            // 결과 집계
+            results.forEach((result, idx) => {
+                if (result.status === 'fulfilled') {
+                    successCount++;
+                } else {
+                    failCount++;
+                    const fileName = batch[idx].basename;
+                    failedFiles.push(fileName);
+                    console.error(`[DocumentService] ${fileName} 실패:`, result.reason);
+                }
+            });
+
+            // API Rate Limit 방지 (1초 대기)
+            if (i + batchSize < allFilePaths.length) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
         }
+
+        await this.database.saveData();
+
+        console.log(
+            `[DocumentService] 전체 임베딩 완료: ` +
+            `성공 ${successCount}개, 실패 ${failCount}개`
+        );
+
+        if (failedFiles.length > 0) {
+            console.warn(`[DocumentService] 실패한 파일 목록:`, failedFiles);
+        }
+
+        return { successCount, failCount, failedFiles };
     }
 
     // 파일 이동시(Path 변경시) 감지 및 변경함수

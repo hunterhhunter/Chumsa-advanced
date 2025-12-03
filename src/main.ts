@@ -5,21 +5,48 @@ import { SearchView, SEARCH_VIEW_TYPE } from './views/search_view';
 import { ChumsaSettings, DEFAULT_SETTINGS, getHeadingConfig, HeadingLevel } from './settings/settings';
 import { ChumsaSettingTab } from './settings/settings_tab';
 import { SearchFilter } from './services/search_filter';
+import { AI_CHAT_VIEW_TYPE, AIChatView } from './views/ai_chat_view';
 
 
 dotenv.config();
 
 export default class MyPlugin extends Plugin {
 	settings: ChumsaSettings;
-	documentService: DocumentService | null = null;
+	public documentService: DocumentService | null = null;
     searchFilter: SearchFilter | null = null;
 	// 검색 레이스 컨디션 방지용 ID 관리 변수
 	private searchRequestSeq = 0;
 
 	async onload() {
-		await this.loadSettings();
-		await this.tryInitializeDocumentService();
+		console.log('[Main] ===== 플러그인 로드 시작 =====');
+    
+        await this.loadSettings();
+        console.log('[Main] ✅ 설정 로드 완료');
+        console.log(`[Main] API 키 존재: ${!!this.settings.OPENAI_API_KEY}`);
+        console.log(`[Main] API 키 길이: ${this.settings.OPENAI_API_KEY?.length || 0}`);
+        
+        await this.tryInitializeDocumentService();
+        console.log(`[Main] DocumentService 초기화: ${!!this.documentService}`);
+        
         this.initializeSearchFilter();
+        console.log(`[Main] SearchFilter 초기화: ${!!this.searchFilter}`);
+
+            // 🔧 AI 채팅 뷰 등록
+        this.registerView(
+            AI_CHAT_VIEW_TYPE,
+            (leaf) => new AIChatView(leaf, this)
+        );
+
+        this.addRibbonIcon('message-circle', 'AI 채팅 열기', async () => {
+            await this.activateAIChatView();
+        });
+
+        // 🔧 AI 채팅 토글 명령어
+        this.addCommand({
+            id: "toggle-ai-chat-view",
+            name: "AI 채팅 열기/닫기",
+            callback: () => this.toggleAIChatView()
+        });
 
 		// --------------------- SEARCH_VIEW 관련 로직 ---------------------
 		// SEARCH_VIEW를 등록
@@ -64,25 +91,89 @@ export default class MyPlugin extends Plugin {
 		this.addSettingTab(new ChumsaSettingTab(this.app, this));
 	}
 
-	/**
-     * 헤딩 검색 핸들러 (품질 필터링 적용)
+    /**
+     * 🆕 AI 채팅 뷰 활성화 (항상 열림)
      */
-    private async handleHeadingSearch(
+    private async activateAIChatView() {
+        const { workspace } = this.app;
+        
+        let leaf = workspace.getLeavesOfType(AI_CHAT_VIEW_TYPE)[0];
+        
+        if (!leaf) {
+            // 오른쪽 사이드바에 새 리프 생성
+            const rightLeaf = workspace.getRightLeaf(false);
+            if (rightLeaf) {
+                await rightLeaf.setViewState({
+                    type: AI_CHAT_VIEW_TYPE,
+                    active: true,
+                });
+                leaf = rightLeaf;
+            }
+        }
+        
+        if (leaf) {
+            workspace.revealLeaf(leaf);
+        }
+    }
+
+    /**
+     * AI 채팅 뷰 토글
+     */
+    private async toggleAIChatView() {
+        const { workspace } = this.app;
+        
+        let leaf = workspace.getLeavesOfType(AI_CHAT_VIEW_TYPE)[0];
+        
+        if (leaf) {
+            workspace.revealLeaf(leaf);
+        } else {
+            const rightLeaf = workspace.getRightLeaf(false);
+            if (rightLeaf) {
+                await rightLeaf.setViewState({
+                    type: AI_CHAT_VIEW_TYPE,
+                    active: true,
+                });
+                workspace.revealLeaf(rightLeaf);
+            }
+        }
+    }
+
+	private async handleHeadingSearch(
         heading: Element,
         context: any
     ): Promise<void> {
+        const headingText = heading.textContent || "";
+        const fileName = context.sourcePath?.split('/').pop()?.replace('.md', '') || 'unknown';
+
+        console.log('[Main] ===== 헤딩 검색 시작 =====');
+        console.log(`[Main] 원본 헤딩 텍스트: "${headingText}"`);
+        console.log(`[Main] 파일명: "${fileName}"`);
+        console.log(`[Main] 전체 경로: "${context.sourcePath}"`);
+
+        // 🔧 입력 검증 강화
+        if (!headingText || headingText.trim().length === 0) {
+            console.error('[Main] 검색 실패: 빈 헤딩');
+            new Notice('검색할 헤딩 텍스트가 없습니다.');
+            return;
+        }
+
+        if (!fileName || fileName === 'unknown') {
+            console.error('[Main] 검색 실패: 파일명 추출 실패');
+            console.error('[Main] context.sourcePath:', context.sourcePath);
+            new Notice('파일명을 확인할 수 없습니다.');
+            return;
+        }
+
         if (!this.documentService) {
-            new Notice('먼저 DocumentService를 초기화해주세요.');
+            console.error('[Main] 검색 실패: DocumentService 초기화 안됨');
+            new Notice('먼저 설정에서 OpenAI API Key를 입력하세요.');
             return;
         }
 
-        if (!this.searchFilter) {
-            new Notice('SearchFilter가 초기화되지 않았습니다.');
-            return;
-        }
-
+        // SearchView 열기
         const searchView = await this.activateSearchView();
         if (!searchView) {
+            console.error('[Main] SearchView 활성화 실패');
             new Notice('검색 뷰를 열 수 없습니다.');
             return;
         }
@@ -91,61 +182,56 @@ export default class MyPlugin extends Plugin {
         searchView.showLoadingSafe(requestId);
 
         try {
-            const sectionInfo = context.getSectionInfo(heading as HTMLElement);
-            if (!sectionInfo) {
-                searchView.showErrorSafe("헤딩 정보를 가져올 수 없습니다.", requestId);
-                return;
-            }
-
-            const lines = sectionInfo.text.split('\n');
-            const clickLineText = lines[sectionInfo.lineStart];
-
-            if (!clickLineText) {
-                searchView.showErrorSafe("헤딩 텍스트를 가져올 수 없습니다.", requestId);
-                return;
-            }
-
-            const file = this.app.vault.getAbstractFileByPath(context.sourcePath);
-            const fileName = file ? file.name : context.sourcePath.split('/').pop()!;
-            const currentFilePath = context.sourcePath;
-
-            console.log(`검색 시작 - 파일: ${fileName}, 헤딩: ${clickLineText}`);
-
-            // 50개 검색 (필터링 전)
-            const rawResults = await this.documentService.searchSimilarBlocks(
+            console.log('[Main] DocumentService.searchSimilarBlocks 호출...');
+            
+            const results = await this.documentService.searchSimilarBlocks(
                 fileName,
-                clickLineText,
+                headingText,
                 this.settings.spliter,
                 50
             );
 
-            console.log(`원본 검색 결과: ${rawResults.length}개`);
+            console.log(`[Main] ✅ 검색 성공: ${results.length}개 결과`);
 
-            // 쿼리에서 자동 태그
-            const queryTags = this.searchFilter.extractTagsFromText(clickLineText);
+            // 품질 필터링
+            const filteredResults = this.searchFilter?.filterResults(results, [], context.sourcePath) || results;
+            console.log(`[Main] 필터링 후 결과: ${filteredResults.length}개`);
 
-            // 품질 필터링 적용
-            const filteredResults = this.searchFilter.filterResults(
-                rawResults,
-                queryTags,
-                currentFilePath
-            );
-
-            console.log(`필터링 후 결과: ${filteredResults.length}개`);
-
-            // 결과를 SearchView에 전달
+            // SearchView에 결과 전달
             await searchView.setResults(filteredResults, requestId);
 
         } catch (error) {
-            console.error('검색 중 오류 발생:', error);
-            const errorMsg = error instanceof Error ? error.message : "알 수 없는 오류";
-            searchView.showErrorSafe(`검색 실패: ${errorMsg}`, requestId);
+            console.error('[Main] ===== 검색 실패 =====');
+            console.error('[Main] 에러 상세:', error);
+            
+            // 🔧 에러 타입별 메시지
+            let errorMessage = '검색 중 오류가 발생했습니다.';
+            
+            if (error instanceof Error) {
+                console.error('[Main] 에러 메시지:', error.message);
+                console.error('[Main] 에러 스택:', error.stack);
+
+                if (error.message.includes('빈 텍스트')) {
+                    errorMessage = '검색 텍스트가 비어있습니다. 헤딩을 확인하세요.';
+                } else if (error.message.includes('임베딩')) {
+                    errorMessage = '임베딩 생성 실패. API 키를 확인하세요.';
+                } else if (error.message.includes('네트워크') || error.message.includes('API')) {
+                    errorMessage = '네트워크 오류. 인터넷 연결을 확인하세요.';
+                } else if (error.message.includes('인덱스')) {
+                    errorMessage = '인덱스 오류. 파일을 다시 인덱싱하세요.';
+                }
+            }
+
+            searchView.showErrorSafe(errorMessage, requestId);
+            new Notice(`❌ ${errorMessage}`);
         }
     }
 
 	onunload() {
 		// 정리 작업
 		this.searchRequestSeq = 0;
+        // 🔧 AI 채팅 뷰 정리
+        this.app.workspace.detachLeavesOfType(AI_CHAT_VIEW_TYPE);
 	}
 
 	async loadSettings() {
@@ -198,23 +284,35 @@ export default class MyPlugin extends Plugin {
     }
 
 	private async tryInitializeDocumentService(force = false): Promise<void> {
-        const apiKey = this.settings.OPENAI_API_KEY?.trim();
-        if (!apiKey) {
-            new Notice('OpenAI API Key가 설정되어 있지 않습니다. 설정에서 입력하세요.');
+        console.log('[Main] tryInitializeDocumentService 시작');
+        console.log(`[Main] force: ${force}, 기존 서비스: ${!!this.documentService}`);
+
+        if (!this.settings.OPENAI_API_KEY) {
+            console.warn('[Main] API 키 없음, DocumentService 초기화 건너뜀');
+            new Notice('OpenAI API 키를 설정에서 입력해주세요.');
             return;
         }
+
         if (this.documentService && !force) {
-            // 이미 초기화됨
+            console.log('[Main] DocumentService 이미 초기화됨, 건너뜀');
             return;
         }
+
         try {
-            // 기존 인스턴스가 있으면 교체
-            this.documentService = new DocumentService(this.app, apiKey, "iiiidd");
-            new Notice('DocumentService가 초기화되었습니다.');
+            console.log('[Main] DocumentService 생성 중...');
+            
+            this.documentService = new DocumentService(
+                this.app,
+                this.settings.OPENAI_API_KEY,
+                this.settings.indexFileName
+            );
+
+            console.log('[Main] ✅ DocumentService 초기화 완료');
+
         } catch (error) {
-            const msg = error instanceof Error ? error.message : String(error);
-            console.error('DocumentService 초기화 실패:', error);
-            new Notice(`DocumentService 초기화 실패: ${msg}`);
+            console.error('[Main] DocumentService 초기화 실패:', error);
+            new Notice(`서비스 초기화 실패: ${(error as Error).message}`);
+            this.documentService = null;
         }
     }
 

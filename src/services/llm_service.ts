@@ -6,8 +6,10 @@ import {
     MdHeaddingBlock,
     AutoTagOptions,
     AutoTagResponse,
-    TextGenerationOptions
+    TextGenerationOptions,
+    ChatMessage
 } from "../types/structures";
+import { ItemView } from "obsidian";
 
 /**
  * OpenAI 기반 LLM 통합 서비스
@@ -21,10 +23,46 @@ export class LLMService implements ILLMService {
     private readonly CHAT_MODEL = "gpt-4o-mini";
 
     constructor(apiKey: string) {
-        this.client = new OpenAI({
-            apiKey: apiKey,
-            dangerouslyAllowBrowser: true
-        });
+        // 🔧 API 키 검증 강화
+        if (!apiKey || typeof apiKey !== 'string') {
+            console.error('[LLMService] 생성자: API 키가 문자열이 아님:', typeof apiKey);
+            throw new Error('OpenAI API 키가 유효하지 않습니다');
+        }
+
+        if (apiKey.trim().length === 0) {
+            console.error('[LLMService] 생성자: API 키가 비어있음');
+            throw new Error('OpenAI API 키가 비어있습니다');
+        }
+
+        if (!apiKey.startsWith('sk-')) {
+            console.error('[LLMService] 생성자: API 키 형식 오류 (sk-로 시작해야 함)');
+            throw new Error('OpenAI API 키 형식이 올바르지 않습니다 (sk-로 시작해야 함)');
+        }
+
+        console.log('[LLMService] 초기화 중...');
+        console.log(`[LLMService] API 키 길이: ${apiKey.length}`);
+        console.log(`[LLMService] API 키 접두사: ${apiKey.substring(0, 7)}...`);
+
+        try {
+            this.client = new OpenAI({
+                apiKey: apiKey,
+                dangerouslyAllowBrowser: true
+            });
+            console.log('[LLMService] ✅ OpenAI 클라이언트 초기화 완료');
+        } catch (error) {
+            console.error('[LLMService] OpenAI 클라이언트 초기화 실패:', error);
+            throw new Error(`OpenAI 클라이언트 초기화 실패: ${(error as Error).message}`);
+        }
+    }
+
+    /**
+     * 클라이언트 상태 검증
+     */
+    private validateClient(): void {
+        if (!this.client) {
+            console.error('[LLMService] OpenAI 클라이언트가 없음');
+            throw new Error('OpenAI 클라이언트가 초기화되지 않았습니다');
+        }
     }
 
     // ==================== 임베딩 메서드 ====================
@@ -33,10 +71,20 @@ export class LLMService implements ILLMService {
      * 단일 텍스트 임베딩 생성
      */
     async embeddingOneText(text: string): Promise<number[]> {
+        this.validateClient();
+        // 🔧 입력 검증 추가
+        const cleanedText = this.cleanTextForEmbedding(text);
+        
+        if (!cleanedText || cleanedText.trim().length === 0) {
+            console.warn('[LLMService] 빈 텍스트 건너뜀');
+            throw new Error('빈 텍스트는 임베딩할 수 없습니다');
+        }
+
         try {
             const response = await this.client.embeddings.create({
                 model: this.EMBEDDING_MODEL,
-                input: text
+                input: cleanedText,
+                encoding_format: "float"
             });
 
             const vector = response.data[0].embedding;
@@ -50,51 +98,86 @@ export class LLMService implements ILLMService {
     }
 
     /**
-     * 단일 블록 임베딩 생성
-     */
-    async embeddingBlock(block: MdHeaddingBlock): Promise<EmbededData> {
-        const vector = await this.embeddingOneText(block.text);
-        
-        // metadata 생성 (key에서 filePath, fileName 추출)
-        const keyParts = block.key.split(' of ');
-        const fileName = keyParts[1] || 'unknown';
-        
-        return { 
-            id: block.id, 
-            vector: vector
-        };
-    }
-
-    /**
      * 여러 블록 일괄 임베딩 생성 (배치 처리)
      */
     async embeddingBlocks(blocks: MdBlocks): Promise<EmbededData[]> {
-        const texts = blocks.blocks.map(block => block.text);
+        // 🔧 빈 블록 필터링 및 텍스트 정리
+        const validBlocks = blocks.blocks.filter(block => {
+            const cleaned = this.cleanTextForEmbedding(block.text);
+            return cleaned && cleaned.trim().length > 0;
+        });
+
+        if (validBlocks.length === 0) {
+            console.warn(`[LLMService] ${blocks.fileName}: 유효한 블록이 없습니다`);
+            return [];
+        }
+
+        // 🔧 텍스트 정리 및 길이 제한
+        const texts = validBlocks.map(block => {
+            const cleaned = this.cleanTextForEmbedding(block.text);
+            // OpenAI 토큰 제한: 최대 8191 토큰 (약 30,000자)
+            return cleaned.length > 30000 
+                ? cleaned.substring(0, 30000) + '...'
+                : cleaned;
+        });
 
         try {
+            console.log(`[LLMService] ${blocks.fileName}: ${texts.length}개 블록 임베딩 시작`);
+
             const response = await this.client.embeddings.create({
                 model: this.EMBEDDING_MODEL,
-                input: texts
+                input: texts,
+                encoding_format: "float"
             });
 
             const embeddedData: EmbededData[] = response.data.map((item, index) => {
                 this.validateVector(item.embedding);
                 return {
-                    id: blocks.blocks[index].id,
+                    id: validBlocks[index].id,
                     vector: item.embedding,
                     metadata: {
                         filePath: blocks.filePath,
                         fileName: blocks.fileName,
-                        key: blocks.blocks[index].key
+                        key: validBlocks[index].key
                     }
                 };
             });
 
+            console.log(`[LLMService] ${blocks.fileName}: ${embeddedData.length}개 임베딩 완료`);
             return embeddedData;
+
         } catch (error) {
-            console.error('블록 임베딩 실패:', error);
+            console.error(`[LLMService] ${blocks.fileName} 블록 임베딩 실패:`, error);
+            
+            // 🔧 상세 에러 로깅
+            if (error instanceof Error) {
+                console.error('에러 상세:', {
+                    message: error.message,
+                    validBlockCount: validBlocks.length,
+                    textLengths: texts.map(t => t.length),
+                    sampleTexts: texts.slice(0, 3).map(t => t.substring(0, 100))
+                });
+            }
+            
             throw new Error(`블록 임베딩 중 오류 발생: ${(error as Error).message}`);
         }
+    }
+
+    /**
+     * 텍스트 정리 (임베딩용)
+     */
+    private cleanTextForEmbedding(text: string): string {
+        if (!text) return '';
+
+        return text
+            // 제어문자 제거 (줄바꿈 제외)
+            .replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/g, '')
+            // 연속된 공백 정규화
+            .replace(/\s+/g, ' ')
+            // 연속된 줄바꿈 제한 (최대 2개)
+            .replace(/\n{3,}/g, '\n\n')
+            // 앞뒤 공백 제거
+            .trim();
     }
 
     // ==================== 자동 태그 생성 메서드 ====================
@@ -178,15 +261,27 @@ export class LLMService implements ILLMService {
     // ==================== 유틸리티 메서드 ====================
 
     /**
-     * API 키 업데이트 (설정 변경 시 사용)
+     * API 키 업데이트
      */
     updateApiKey(apiKey: string): void {
+        console.log('[LLMService] API 키 업데이트 중...');
+
+        if (!apiKey || typeof apiKey !== 'string') {
+            throw new Error('유효하지 않은 API 키');
+        }
+
+        if (!apiKey.startsWith('sk-')) {
+            throw new Error('API 키 형식 오류 (sk-로 시작해야 함)');
+        }
+
         this.client = new OpenAI({
             apiKey: apiKey,
             dangerouslyAllowBrowser: true
         });
-    }
 
+        console.log('[LLMService] ✅ API 키 업데이트 완료');
+    }
+    
     /**
      * 벡터 유효성 검증
      */
@@ -253,5 +348,35 @@ export class LLMService implements ILLMService {
 \`\`\`markdown
 ${truncatedContent}
 \`\`\``;
+    }
+
+    /**
+     * AI 채팅 완성 (기존 LLMService에 추가)
+     */
+    async createChatCompletion(
+        messages: ChatMessage[],
+        options?: {
+            temperature?: number;
+            maxTokens?: number;
+        }
+    ): Promise<string> {
+        this.validateClient();
+
+        try {
+            const response = await this.client.chat.completions.create({
+                model: this.CHAT_MODEL,
+                messages: messages.map(msg => ({
+                    role: msg.role,
+                    content: msg.content
+                })),
+                temperature: options?.temperature ?? 0.7,
+                max_tokens: options?.maxTokens ?? 2000,
+            });
+
+            return response.choices[0]?.message?.content || '응답을 생성할 수 없습니다.';
+        } catch (error) {
+            console.error('[LLMService] 채팅 완성 실패:', error);
+            throw new Error(`채팅 완성 중 오류: ${(error as Error).message}`);
+        }
     }
 }

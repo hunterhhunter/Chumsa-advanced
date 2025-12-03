@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, TFile, Notice, normalizePath, ButtonComponent, MarkdownRenderer, MarkdownView, setIcon } from "obsidian";
+import { ItemView, WorkspaceLeaf, TFile, Notice, normalizePath, ButtonComponent, MarkdownRenderer, MarkdownView, setIcon, Modal } from "obsidian";
 import MyPlugin from "src/main";
 import { MainDataBaseSearchResult } from "src/types/structures";
 import { setupDragData, createDragPreview } from "src/utils/drag_handler";
@@ -85,7 +85,15 @@ export class SearchView extends ItemView {
                 await this.generateAutoTags();
             });
 
-        // 버튼 3: 인덱스 초기화
+        // 버튼 3: 전체 파일 임베딩 (🆕 추가)
+        new ButtonComponent(buttonsRow)
+            .setButtonText("📚 전체 임베딩")
+            .setTooltip("볼트 전체 파일을 임베딩합니다")
+            .onClick(async () => {
+                await this.indexAllFiles();
+            });
+
+        // 버튼 4: 인덱스 초기화
         new ButtonComponent(buttonsRow)
             .setButtonText("🗑️ 초기화")
             .setTooltip("인덱스를 초기화합니다")
@@ -538,4 +546,122 @@ export class SearchView extends ItemView {
             new Notice(`❌ 자동 태그 생성 실패: ${errorMsg}`);
         }
     }
+
+    /**
+     * 볼트 전체 파일 임베딩
+     */
+    private async indexAllFiles(): Promise<void> {
+        if (!this.plugin.documentService) {
+            new Notice("먼저 설정에서 DocumentService를 초기화하세요.");
+            return;
+        }
+
+        const confirmed = await this.confirmBulkIndexing();
+        if (!confirmed) return;
+
+        try {
+            const allFiles = this.app.vault.getMarkdownFiles();
+            const totalFiles = allFiles.length;
+
+            if (totalFiles === 0) {
+                new Notice("임베딩할 마크다운 파일이 없습니다.");
+                return;
+            }
+
+            new Notice(`📚 전체 임베딩 시작: ${totalFiles}개 파일`);
+            console.log(`[SearchView] 전체 임베딩 시작: ${totalFiles}개 파일`);
+
+            const startTime = Date.now();
+
+            // 🔧 결과 반환값 사용
+            const result = await this.plugin.documentService.saveVault(
+                allFiles,
+                10,
+                this.plugin.settings.spliter
+            );
+
+            const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+            
+            // 🔧 성공/실패 분리 표시
+            if (result.failCount === 0) {
+                new Notice(
+                    `✅ 전체 임베딩 완료!\n` +
+                    `처리된 파일: ${result.successCount}개\n` +
+                    `소요 시간: ${duration}초`,
+                    6000
+                );
+            } else {
+                new Notice(
+                    `⚠️ 임베딩 완료 (일부 실패)\n` +
+                    `성공: ${result.successCount}개\n` +
+                    `실패: ${result.failCount}개\n` +
+                    `소요 시간: ${duration}초`,
+                    8000
+                );
+                
+                // 실패 파일 로그
+                console.warn('[SearchView] 실패한 파일:', result.failedFiles);
+            }
+
+            console.log(`[SearchView] ✅ 전체 임베딩 완료: ${result.successCount}/${totalFiles}개, ${duration}초`);
+
+            this.showEmptyState(
+                `✅ ${result.successCount}개 파일 임베딩 완료\n` +
+                (result.failCount > 0 ? `⚠️ ${result.failCount}개 파일 실패\n` : '') +
+                `헤딩 검색 아이콘을 클릭하여 유사 문서를 찾아보세요.`
+            );
+
+        } catch (error) {
+            console.error("[SearchView] 전체 임베딩 실패:", error);
+            const errorMsg = error instanceof Error ? error.message : "알 수 없는 오류";
+            new Notice(`❌ 전체 임베딩 실패: ${errorMsg}`, 5000);
+        }
+    }
+
+/**
+ * 🆕 전체 임베딩 확인 모달
+ */
+private async confirmBulkIndexing(): Promise<boolean> {
+    return new Promise((resolve) => {
+        const modal = new Modal(this.app);
+        modal.titleEl.setText("전체 파일 임베딩");
+
+        const totalFiles = this.app.vault.getMarkdownFiles().length;
+
+        modal.contentEl.createEl("p", {
+            text: `볼트 내 모든 마크다운 파일(${totalFiles}개)을 임베딩합니다.`
+        });
+
+        modal.contentEl.createEl("p", {
+            text: "⚠️ 이 작업은 시간이 오래 걸릴 수 있으며, OpenAI API 사용량이 증가합니다.",
+            cls: "mod-warning"
+        });
+
+        modal.contentEl.createEl("p", {
+            text: `예상 소요 시간: 약 ${Math.ceil(totalFiles / 10)}분`,
+            cls: "setting-item-description"
+        });
+
+        const buttonContainer = modal.contentEl.createDiv("modal-button-container");
+
+        const confirmButton = buttonContainer.createEl("button", {
+            text: "임베딩 시작",
+            cls: "mod-cta"
+        });
+        confirmButton.addEventListener("click", () => {
+            modal.close();
+            resolve(true);
+        });
+
+        const cancelButton = buttonContainer.createEl("button", {
+            text: "취소"
+        });
+        cancelButton.addEventListener("click", () => {
+            modal.close();
+            resolve(false);
+        });
+
+        modal.open();
+    });
+}
 }

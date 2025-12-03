@@ -7,9 +7,10 @@ import { MainDataBaseSearchResult, SearchFilterSettings } from "../types/structu
  * 기본 필터 설정
  */
 export const DEFAULT_FILTER_SETTINGS: SearchFilterSettings = {
-    vectorWeight: 0.7,
-    tagWeight: 0.3,
+    vectorWeight: 1.0,
+    tagWeight: 0.0,
     qualityThreshold: 0.0,
+    excludeSameFile: true,
 };
 
 /**
@@ -43,8 +44,25 @@ export class SearchFilter {
         queryTags: string[] = [],
         currentFilePath?: string
     ): MainDataBaseSearchResult[] {
+        console.log(`[SearchFilter] 필터링 시작: ${results.length}개 결과`);
+        console.log(`[SearchFilter] 현재 파일: ${currentFilePath || '없음'}`);
+
+        // 🔧 0단계: 동일 파일 필터링
+        let filteredResults = results;
+        
+        if (currentFilePath) {
+            const beforeCount = filteredResults.length;
+            
+            filteredResults = filteredResults.filter(result => {
+                return result.metadata.filePath !== currentFilePath;
+            });
+
+            const removedCount = beforeCount - filteredResults.length;
+            console.log(`[SearchFilter] 동일 파일 제외: ${removedCount}개 제거`);
+        }
+
         // 1단계: 품질 점수 재계산
-        const scoredResults = results.map(result => {
+        const scoredResults = filteredResults.map(result => {
             const qualityScore = this.calculateQualityScore(
                 result, 
                 queryTags, 
@@ -62,10 +80,14 @@ export class SearchFilter {
             return result.score >= this.settings.qualityThreshold;
         });
 
+        console.log(`[SearchFilter] 임계값 필터링 후: ${qualifiedResults.length}개`);
+
         // 3단계: 점수 기준 내림차순 정렬
         const sortedResults = qualifiedResults.sort((a, b) => {
             return b.score - a.score;
         });
+
+        console.log(`[SearchFilter] 최종 결과: ${sortedResults.length}개`);
 
         return sortedResults;
     }

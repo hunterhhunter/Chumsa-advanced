@@ -540,3 +540,471 @@
         page-break-inside: avoid;
     }
 }
+
+/* 모달 버튼 컨테이너 */
+.modal-button-container {
+    display: flex;
+    gap: 8px;
+    margin-top: 20px;
+    justify-content: flex-end;
+}
+
+.modal-button-container button {
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+/* 경고 텍스트 */
+.mod-warning {
+    color: var(--text-error);
+    font-weight: 500;
+}
+
+
+/* ----------------------------------------------------------------------- */
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css");
+
+@function hexToRGB($hex) {
+	@return red($hex), green($hex), blue($hex);
+}
+/* 1.1 Color Palette - Light Mode */
+:root,
+.theme-light {
+	/* Primary Colors */
+	--chumsa-primary: #00897b;
+	--chumsa-primary-hover: #00796b;
+	--chumsa-primary-active: #00695c;
+	--chumsa-primary-light: #4db6ac;
+	--chumsa-primary-lighter: #b2dfdb;
+	--chumsa-primary-dark: #004d40;
+
+	/* Accent Colors */
+	--chumsa-accent: #00bcd4;
+	--chumsa-accent-hover: #00acc1;
+	--chumsa-accent-light: #80deea;
+	--chumsa-accent-lighter: #e0f7fa;
+
+	/* Background Colors */
+	--chumsa-bg-primary: #ffffff;
+	--chumsa-bg-secondary: #fafafa;
+	--chumsa-bg-tertiary: #f5f5f5;
+	--chumsa-bg-elevated: #ffffff;
+	--chumsa-bg-hover: #f5f5f5;
+	--chumsa-bg-active: #eeeeee;
+	--chumsa-bg-selected: #e0f7fa;
+	--chumsa-bg-selected-60: rgba(224, 247, 250, 0.6);
+
+	/* Text Colors */
+	--chumsa-text-primary: #212121;
+	--chumsa-text-secondary: #757575;
+	--chumsa-text-tertiary: #9e9e9e;
+	--chumsa-text-link: #00897b;
+	--chumsa-text-link-hover: #00695c;
+	--chumsa-text-on-primary: #ffffff;
+	--chumsa-text-on-accent: #ffffff;
+
+	/* Border & Divider */
+	--chumsa-border-primary: #e0e0e0;
+	--chumsa-border-secondary: #eeeeee;
+	--chumsa-border-hover: #bdbdbd;
+	--chumsa-border-focus: #00897b;
+	--chumsa-divider: #e0e0e0;
+
+	/* UI Components */
+	--chumsa-scrollbar-bg: #f5f5f5;
+	--chumsa-scrollbar-thumb: #bdbdbd;
+	--chumsa-scrollbar-thumb-hover: #9e9e9e;
+
+	/* Shadows */
+	--chumsa-shadow-sm: rgba(0, 0, 0, 0.05);
+	--chumsa-shadow-md: rgba(0, 0, 0, 0.1);
+	--chumsa-shadow-lg: rgba(0, 0, 0, 0.15);
+
+	/* Status Colors */
+	--chumsa-success: #4caf50;
+	--chumsa-warning: #ff9800;
+	--chumsa-error: #f44336;
+	--chumsa-info: #2196f3;
+}
+
+/* 1.2 Color Palette - Dark Mode */
+.theme-dark {
+	/* Primary Colors */
+	--chumsa-primary: #4db6ac;
+	--chumsa-primary-hover: #80cbc4;
+	--chumsa-primary-active: #b2dfdb;
+	--chumsa-primary-light: #80cbc4;
+	--chumsa-primary-lighter: #b2dfdb;
+	--chumsa-primary-dark: #00695c;
+
+	/* Accent Colors */
+	--chumsa-accent: #80deea;
+	--chumsa-accent-hover: #b2ebf2;
+	--chumsa-accent-light: #b2ebf2;
+	--chumsa-accent-lighter: #e0f7fa;
+
+	/* Background Colors */
+	--chumsa-bg-primary: #1e1e1e;
+	--chumsa-bg-secondary: #252525;
+	--chumsa-bg-tertiary: #2c2c2c;
+	--chumsa-bg-elevated: #2c2c2c;
+	--chumsa-bg-hover: #333333;
+	--chumsa-bg-active: #383838;
+	--chumsa-bg-selected: #004d40;
+	--chumsa-bg-selected-60: rgba(0, 77, 64, 0.6);
+
+	/* Text Colors */
+	--chumsa-text-primary: #e0e0e0;
+	--chumsa-text-secondary: #bdbdbd;
+	--chumsa-text-tertiary: #757575;
+	--chumsa-text-link: #4db6ac;
+	--chumsa-text-link-hover: #80cbc4;
+	--chumsa-text-on-primary: #000000;
+	--chumsa-text-on-accent: #000000;
+
+	/* Border & Divider */
+	--chumsa-border-primary: #424242;
+	--chumsa-border-secondary: #373737;
+	--chumsa-border-hover: #616161;
+	--chumsa-border-focus: #4db6ac;
+	--chumsa-divider: #424242;
+
+	/* UI Components */
+	--chumsa-scrollbar-bg: #2c2c2c;
+	--chumsa-scrollbar-thumb: #616161;
+	--chumsa-scrollbar-thumb-hover: #757575;
+
+	/* Shadows */
+	--chumsa-shadow-sm: rgba(0, 0, 0, 0.3);
+	--chumsa-shadow-md: rgba(0, 0, 0, 0.4);
+	--chumsa-shadow-lg: rgba(0, 0, 0, 0.5);
+}
+
+/* 1.3 Typography - Worker: claude_agent (251027:00:45, 폰트 크기 축소) */
+:root {
+	--chumsa-font-korean: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR",
+		sans-serif;
+	--chumsa-font-english: "Inter", -apple-system, BlinkMacSystemFont,
+		"Segoe UI", sans-serif;
+	--chumsa-font-monospace: "Fira Code", "JetBrains Mono", "Consolas",
+		monospace;
+	--chumsa-font-text: var(--chumsa-font-korean), var(--chumsa-font-english);
+
+	--chumsa-font-size-xs: 10px; /* 11px → 10px */
+	--chumsa-font-size-sm: 12px; /* 13px → 12px (사이드바) */
+	--chumsa-font-size-base: 14px; /* 15px → 14px (에디터 본문) */
+	--chumsa-font-size-md: 15px; /* 16px → 15px */
+	--chumsa-font-size-lg: 17px; /* 18px → 17px (H3) */
+	--chumsa-font-size-xl: 20px; /* 22px → 20px (H2) */
+	--chumsa-font-size-2xl: 26px; /* 28px → 26px (H1) */
+
+	--chumsa-line-height-tight: 1.3;
+	--chumsa-line-height-normal: 1.6;
+	--chumsa-line-height-relaxed: 1.8;
+}
+
+/* 1.4 Spacing */
+:root {
+	--chumsa-space-xs: 4px;
+	--chumsa-space-sm: 8px;
+	--chumsa-space-md: 12px;
+	--chumsa-space-lg: 16px;
+	--chumsa-space-xl: 24px;
+	--chumsa-space-2xl: 32px;
+	--chumsa-space-3xl: 48px;
+}
+
+/* 1.5 Border Radius */
+:root {
+	--chumsa-radius-sm: 4px;
+	--chumsa-radius-md: 6px;
+	--chumsa-radius-lg: 8px;
+	--chumsa-radius-xl: 12px;
+	--chumsa-radius-full: 9999px;
+}
+
+/* 1.6 Transitions */
+:root {
+	--chumsa-transition-fast: 150ms ease;
+	--chumsa-transition-base: 250ms ease;
+	--chumsa-transition-slow: 350ms ease;
+}
+
+body {
+	font-family: var(--chumsa-font-text) !important;
+	--font-default: var(--chumsa-font-text) !important;
+	--font-monospace-default: var(--chumsa-font-text) !important;
+	--font-interface-override: var(--chumsa-font-text) !important;
+	caret-color: var(--chumsa-primary) !important;
+	--blockquote-border-color: var(--chumsa-accent) !important;
+	--link-external-color: var(--chumsa-text-link) !important;
+	--link-external-color-hover: var(--chumsa-text-link-hover) !important;
+	--interactive-accent: var(--chumsa-accent) !important;
+	--color-accent: var(--chumsa-accent) !important;
+}
+a {
+	color: var(--chumsa-text-link) !important;
+}
+a:hover {
+	color: var(--chumsa-text-link-hover) !important;
+}
+/* 활성(선택) 상태 */
+.nav-file-title.is-active {
+	background: var(--chumsa-bg-selected-60) !important;
+	color: var(--chumsa-primary) !important;
+	border-left: 3px solid var(--chumsa-accent) !important;
+	font-weight: 600 !important;
+}
+
+/* 아이콘 */
+.nav-file-title,
+.nav-folder-title {
+	display: flex !important;
+	align-items: center !important;
+}
+
+.custom-file-icon {
+	width: 16px !important;
+	height: 16px !important;
+	margin-right: 4px !important;
+	display: flex !important;
+	align-items: center !important;
+	justify-content: center !important;
+	flex-shrink: 0 !important;
+}
+
+.custom-file-icon svg {
+	width: 16px !important;
+	height: 16px !important;
+
+	stroke: currentColor;
+}
+
+.tree-item-self .tree-item-icon {
+	display: none !important;
+}
+
+/* 검색 입력 필드 */
+.search-input-container input {
+	border: 1px solid var(--chumsa-border-primary);
+}
+
+.search-input-container input:focus {
+	outline: none;
+	border-color: var(--chumsa-border-focus);
+	box-shadow: 0 0 0 2px var(--chumsa-accent-lighter);
+}
+/* 타이틀바 */
+.titlebar {
+	background: var(--chumsa-bg-primary);
+	border-bottom: 1px solid var(--chumsa-border-primary);
+}
+
+/* 뷰 헤더 */
+.view-header {
+	background: var(--chumsa-bg-primary);
+	border-bottom: 1px solid var(--chumsa-border-primary);
+}
+
+.view-header-title {
+	color: var(--chumsa-text-secondary);
+	font-size: var(--chumsa-font-size-lg);
+	font-weight: 600;
+}
+
+/* 헤더 아이콘 */
+.view-actions .clickable-icon {
+	color: var(--chumsa-text-tertiary);
+	transition: color var(--chumsa-transition-fast);
+}
+
+.view-actions .clickable-icon:hover {
+	color: var(--chumsa-primary);
+}
+
+/* 마크다운 헤딩 */
+.cm-header-1,
+.markdown-preview-view h1 {
+	color: var(--chumsa-primary) !important;
+	font-size: var(--chumsa-font-size-2xl) !important;
+	font-weight: 700 !important;
+	padding-bottom: var(--chumsa-space-sm) !important;
+	margin-bottom: var(--chumsa-space-lg) !important;
+}
+
+.cm-header-2,
+.markdown-preview-view h2 {
+	color: var(--chumsa-primary) !important;
+	font-size: var(--chumsa-font-size-xl) !important;
+	font-weight: 600 !important;
+	margin-top: var(--chumsa-space-xl) !important;
+	margin-bottom: var(--chumsa-space-md) !important;
+}
+
+.cm-header-3,
+.markdown-preview-view h3 {
+	color: var(--chumsa-primary) !important;
+	font-size: var(--chumsa-font-size-lg) !important;
+	font-weight: 600 !important;
+	margin-top: var(--chumsa-space-lg) !important;
+	margin-bottom: var(--chumsa-space-sm) !important;
+}
+
+.cm-header-4,
+.cm-header-5,
+.cm-header-6,
+.markdown-preview-view h4,
+.markdown-preview-view h5,
+.markdown-preview-view h6 {
+	color: var(--chumsa-primary-light) !important;
+	font-weight: 600 !important;
+}
+
+/* 에디터 배경 - Worker: claude_agent (251027:00:35, !important 추가) */
+.markdown-preview-view,
+.markdown-source-view.mod-cm6 .cm-editor {
+	background: var(--chumsa-bg-primary) !important;
+	color: var(--chumsa-text-primary) !important;
+	font-family: var(--chumsa-font-text) !important;
+	font-size: var(--chumsa-font-size-base) !important;
+	line-height: var(--chumsa-line-height-normal) !important;
+}
+/* ai pannel */
+/* 전체 패널 */
+.ai-chat-panel {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	background-color: var(--background-secondary);
+	padding: 8px;
+	font-size: 14px;
+	box-sizing: border-box;
+}
+
+/* 메시지 영역 */
+.ai-chat-panel .messages {
+	flex: 1; /* 남은 공간 모두 차지 */
+	overflow-y: auto; /* 스크롤 가능 */
+	margin-bottom: 8px;
+	padding-right: 4px; /* 스크롤바와 겹치지 않게 */
+}
+
+/* 유저 메시지 */
+.ai-chat-panel .messages .user {
+	width: fit-content;
+	background-color: var(--chumsa-primary);
+	color: var(--chumsa-text-on-primary);
+	margin-left: auto;
+	border-radius: 12px 12px 0px 12px;
+	padding: 8px;
+}
+
+/* AI 메시지 */
+.ai-chat-panel .messages .ai {
+	width: fit-content;
+	background-color: var(--chumsa-text-on-primary);
+	border-radius: 12px 12px 12px 0px;
+	padding: 8px;
+}
+
+/* 입력 영역 */
+.ai-chat-panel .input {
+	display: flex;
+	gap: 4px;
+}
+
+/* 입력창 */
+.ai-chat-panel input {
+	flex: 1;
+	padding: 6px 8px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	outline: none;
+	font-size: 14px;
+}
+.ai-chat-panel input:focus {
+	border: 1px solid var(--chumsa-accent);
+	box-shadow: none;
+}
+
+/* 전송 버튼 */
+.ai-chat-panel button {
+	padding: 6px 12px;
+	background-color: var(--chumsa-primary);
+	color: var(--text-on-accent);
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	font-weight: 500;
+	transition: background-color 0.2s ease;
+}
+
+/* 버튼 호버 효과 */
+.ai-chat-panel button:hover {
+	background-color: var(--chumsa-primary-hover);
+}
+
+/* 활성 탭 */
+.workspace-tab-header-container {
+	background: var(--chumsa-bg-secondary);
+	border-bottom: 1px solid var(--chumsa-accent);
+}
+.workspace-tab-header.is-active {
+	background: var(--chumsa-bg-primary);
+	font-weight: 600;
+	box-shadow: 0 0 0 var(--tab-outline-width) var(--chumsa-accent);
+}
+
+.workspace-split.mod-root .workspace-tab-header.is-active::before,
+.workspace-split.mod-root .workspace-tab-header.is-active::after {
+	box-shadow: inset 0 0 0 var(--tab-outline-width) var(--chumsa-accent),
+		0 0 0 calc(var(--tab-curve) * 4) var(--tab-background-active);
+}
+
+/* 탭 제목 */
+.workspace-tab-header-inner-title {
+	font-size: var(--chumsa-font-size-sm);
+}
+.workspace-ribbon.mod-left:before {
+	border-bottom: var(--tab-outline-width) solid var(--chumsa-accent);
+}
+
+.mod-left-split .workspace-tab-header.is-active {
+	box-shadow: none !important;
+	background-color: var(--chumsa-primary-light) !important;
+}
+.workspace-tab-header.is-active .workspace-tab-header-inner-icon {
+	color: var(--chumsa-text-on-primary) !important;
+}
+.mod-right-split .workspace-tab-header.is-active {
+	box-shadow: none !important;
+	background-color: var(--chumsa-primary-light) !important;
+}
+
+.empty-state-action {
+	color: var(--chumsa-primary) !important;
+}
+.canvas-card-menu .canvas-card-menu-button.mod-draggable:hover {
+	color: var(--chumsa-primary-hover) !important;
+}
+.canvas-control-item:hover {
+	color: var(--chumsa-primary-hover) !important;
+}
+.internal-link {
+	color: var(--chumsa-text-link) !important;
+}
+
+.canvas-placeholder-message {
+	color: var(--chumsa-primary);
+	background-color: var(--chumsa-bg-selected-60);
+}
+.cm-s-obsidian .cm-formatting-list {
+	color: var(--chumsa-text-secondary) !important;
+}
+.clickable-icon:hover {
+	color: var(--chumsa-primary-hover) !important;
+}
+.workspace-tab-header-inner-icon:hover {
+	color: var(--chumsa-primary-hover) !important;
+}
