@@ -2,7 +2,7 @@
 
 **Chumsa** is a powerful plugin that connects and recommends knowledge within Obsidian based on AI. Using OpenAI's embedding technology and vector search, it instantly finds data related to the heading or document you are currently writing.
 
-!["./essets/working_example.png"]
+![Working Example](./essets/working_example.png)
 
 ## ✨ Key Features
 
@@ -40,7 +40,7 @@ Analyzes the content of the document you are writing to automatically recommend 
 3. Set the **Heading Spliter Level** (Default: H3). This level determines how documents are split for vector indexing.
 4. Wait for a moment while the plugin automatically scans your documents and generates indexing data.
 
-~["./essets/setting.png"]
+![Setting](./essets/setting.png)
 
 ---
 
