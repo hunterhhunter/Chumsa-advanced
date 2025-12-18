@@ -1,19 +1,81 @@
-# Obsidian community plugin
+# Chumsa-advanced: Obsidian Vector Search Plugin
 
-## Project overview
+## Project Overview
 
-- Target: Obsidian Community Plugin (TypeScript → bundled JavaScript).
-- Entry point: `main.ts` compiled to `main.js` and loaded by Obsidian.
-- Required release artifacts: `main.js`, `manifest.json`, and optional `styles.css`.
+**Chumsa-advanced**는 Obsidian 볼트 내 마크다운 문서에 대해 HNSW 기반 벡터 검색을 제공하는 플러그인입니다.
 
-## Environment & tooling
+- **Target**: Obsidian Community Plugin (TypeScript → bundled JavaScript)
+- **Entry Point**: `src/main.ts` compiled to `main.js`
+- **Core Technology**: HNSW (Hierarchical Navigable Small World) vector database via hnswlib-wasm
+- **Embedding**: OpenAI text-embedding-3-small (1536 dimensions)
+- **Release Artifacts**: `main.js`, `manifest.json`, `styles.css`
 
-- Node.js: use current LTS (Node 18+ recommended).
-- **Package manager: npm** (required for this sample - `package.json` defines npm scripts and dependencies).
-- **Bundler: esbuild** (required for this sample - `esbuild.config.mjs` and build scripts depend on it). Alternative bundlers like Rollup or webpack are acceptable for other projects if they bundle all external dependencies into `main.js`.
-- Types: `obsidian` type definitions.
+---
 
-**Note**: This sample project has specific technical dependencies on npm and esbuild. If you're creating a plugin from scratch, you can choose different tools, but you'll need to replace the build configuration accordingly.
+## Key Features
+
+1. **Vector Database**: HNSW index for efficient similarity search
+2. **Document Indexing**: Parse markdown by headings, generate embeddings, store in vector DB
+3. **Search View**: Dedicated sidebar view for semantic search with auto-linking
+4. **Three-Layer Storage**:
+   - Vector index (`.hnsw` files)
+   - Metadata map (`METADATA_MAP.json`) - file paths, names, keys
+   - Block content map (`BLOCK_MAP.json`) - markdown text, file-to-blocks mapping
+5. **Testing Framework**: Comprehensive test suites for HNSW, block store, metadata store
+
+---
+
+## Project Structure
+
+```
+src/
+  main.ts                     # Plugin lifecycle, command registration
+  settings/
+    settings.ts               # ChumsaSettings interface, defaults, heading config
+    settings_tab.ts           # Settings UI (API key, heading level, test buttons)
+  services/
+    document_service.ts       # High-level document indexing & search
+    embed_model.ts            # OpenAI embedding wrapper
+    main_database.ts          # MainDataBase (coordinates HNSW + stores)
+    search_filter.ts          # Search result filtering logic
+  utils/
+    hnsw_adapter.ts           # HNSWLibAdapter (IVectorDB implementation)
+    block_store.ts            # BlockStore (BLOCK_MAP.json management)
+    metadata_store.ts         # MetadataStore (METADATA_MAP.json management)
+    markdown_parser.ts        # Parse markdown by headings
+    hash_func.ts              # MurmurHash3 for consistent ID generation
+    link_generator.ts         # Generate Obsidian wiki-links from search results
+  views/
+    search_view.ts            # SearchView (sidebar UI for search)
+  widgets/
+    input_widget.ts           # Custom input widget for search view
+  types/
+    structures.ts             # TypeScript interfaces (EmbededData, MdBlocks, etc.)
+  tests/
+    HNSW_test_suite.ts        # HNSW adapter tests
+    block_store_test_suite.ts # Block store tests
+    metadata_store_test_suite.ts # Metadata store tests
+  styles.css                  # Plugin styles
+
+esbuild.config.mjs            # Build configuration
+.env                          # Environment variables (OPENAI_API_KEY, OBSIDIAN_PLUGIN_PATH)
+manifest.json                 # Plugin manifest
+versions.json                 # Version compatibility map
+```
+
+---
+
+## Environment & Tooling
+
+- **Node.js**: LTS (Node 18+ recommended)
+- **Package Manager**: npm
+- **Bundler**: esbuild (via `esbuild.config.mjs`)
+- **Dependencies**:
+  - `hnswlib-wasm`: HNSW vector database (WebAssembly)
+  - `openai`: OpenAI API client for embeddings
+  - `murmurhash3js-revisited`: Consistent hash function for IDs
+  - `dotenv`: Environment variable management
+- **Build Output**: `main.js` (bundles all deps except 'obsidian')
 
 ### Install
 
@@ -21,231 +83,436 @@
 npm install
 ```
 
-### Dev (watch)
+### Dev (watch mode)
+
+Requires `.env` file with:
+```env
+OBSIDIAN_PLUGIN_PATH=C:/path/to/vault/.obsidian/plugins/Chumsa
+OPENAI_API_KEY=sk-proj-...
+```
 
 ```bash
 npm run dev
 ```
 
-### Production build
+Automatically copies `main.js`, `manifest.json`, `styles.css` to `OBSIDIAN_PLUGIN_PATH`.
+
+### Production Build
 
 ```bash
 npm run build
 ```
 
-## Linting
+---
 
-- To use eslint install eslint from terminal: `npm install -g eslint`
-- To use eslint to analyze this project use this command: `eslint main.ts`
-- eslint will then create a report with suggestions for code improvement by file and line number.
-- If your source code is in a folder, such as `src`, you can use eslint with this command to analyze all files in that folder: `eslint ./src/`
+## Architecture
 
-## File & folder conventions
+### Core Components
 
-- **Organize code into multiple files**: Split functionality across separate modules rather than putting everything in `main.ts`.
-- Source lives in `src/`. Keep `main.ts` small and focused on plugin lifecycle (loading, unloading, registering commands).
-- **Example file structure**:
-  ```
-  src/
-    main.ts           # Plugin entry point, lifecycle management
-    settings.ts       # Settings interface and defaults
-    commands/         # Command implementations
-      command1.ts
-      command2.ts
-    ui/              # UI components, modals, views
-      modal.ts
-      view.ts
-    utils/           # Utility functions, helpers
-      helpers.ts
-      constants.ts
-    types.ts         # TypeScript interfaces and types
-  ```
-- **Do not commit build artifacts**: Never commit `node_modules/`, `main.js`, or other generated files to version control.
-- Keep the plugin small. Avoid large dependencies. Prefer browser-compatible packages.
-- Generated output should be placed at the plugin root or `dist/` depending on your build setup. Release artifacts must end up at the top level of the plugin folder in the vault (`main.js`, `manifest.json`, `styles.css`).
+1. **[`src/main.ts`](src/main.ts)**: 
+   - Plugin lifecycle (`onload`, `onunload`)
+   - Command registration (search view toggle)
+   - Initializes [`DocumentService`](src/services/document_service.ts)
 
-## Manifest rules (`manifest.json`)
+2. **[`DocumentService`](src/services/document_service.ts)**:
+   - High-level API: `saveOneDocument`, `updateOneDocument`, `saveVault`, `searchSimilarBlocks`
+   - Coordinates [`MainDataBase`](src/services/main_database.ts) and [`EmbedModel`](src/services/embed_model.ts)
 
-- Must include (non-exhaustive):  
-  - `id` (plugin ID; for local dev it should match the folder name)  
-  - `name`  
-  - `version` (Semantic Versioning `x.y.z`)  
-  - `minAppVersion`  
-  - `description`  
-  - `isDesktopOnly` (boolean)  
-  - Optional: `author`, `authorUrl`, `fundingUrl` (string or map)
-- Never change `id` after release. Treat it as stable API.
-- Keep `minAppVersion` accurate when using newer APIs.
-- Canonical requirements are coded here: https://github.com/obsidianmd/obsidian-releases/blob/master/.github/workflows/validate-plugin-entry.yml
+3. **[`MainDataBase`](src/services/main_database.ts)**:
+   - Orchestrates [`HNSWLibAdapter`](src/utils/hnsw_adapter.ts), [`BlockStore`](src/utils/block_store.ts), [`MetadataStore`](src/utils/metadata_store.ts)
+   - Methods: `addItems`, `search`, `deleteFileBlocks`, `getFileBlockIds`
 
-## Testing
+4. **[`HNSWLibAdapter`](src/utils/hnsw_adapter.ts)**:
+   - Implements [`IVectorDB`](src/types/structures.ts) interface
+   - HNSW index management (initialize, add, search, save, load)
+   - ID-to-vector mapping for consistency
 
-- Manual install for testing: copy `main.js`, `manifest.json`, `styles.css` (if any) to:
-  ```
-  <Vault>/.obsidian/plugins/<plugin-id>/
-  ```
-- Reload Obsidian and enable the plugin in **Settings → Community plugins**.
+5. **[`EmbedModel`](src/services/embed_model.ts)**:
+   - Wraps OpenAI API
+   - Generates embeddings for markdown blocks
 
-## Commands & settings
+6. **[`SearchView`](src/views/search_view.ts)**:
+   - Sidebar view (VIEW_TYPE: "chumsa-search-view")
+   - Search input, results display, auto-linking
+   - File indexing UI
 
-- Any user-facing commands should be added via `this.addCommand(...)`.
-- If the plugin has configuration, provide a settings tab and sensible defaults.
-- Persist settings using `this.loadData()` / `this.saveData()`.
-- Use stable command IDs; avoid renaming once released.
+### Data Flow
 
-## Versioning & releases
+```
+User triggers indexing
+  ↓
+[main.ts] → DocumentService.saveOneDocument(filePath, spliter)
+  ↓
+[document_service.ts] → parseMarkdownByHeadings(filePath, fileName, content, spliter)
+  ↓
+[markdown_parser.ts] → MdBlocks { filePath, fileName, blocks: [{ id, key, text }] }
+  ↓
+[document_service.ts] → EmbedModel.embeddingBlocks(blocks)
+  ↓
+[embed_model.ts] → OpenAI API → EmbededData[] { id, vector[], metadata }
+  ↓
+[document_service.ts] → MainDataBase.addItems(blocks, embededData)
+  ↓
+[main_database.ts] → HNSWLibAdapter.addItems(data)
+                  → BlockStore.addBlocks(blocks)
+                  → MetadataStore.addMetadata(data)
+  ↓
+Storage: *.hnsw, BLOCK_MAP.json, METADATA_MAP.json
+```
 
-- Bump `version` in `manifest.json` (SemVer) and update `versions.json` to map plugin version → minimum app version.
-- Create a GitHub release whose tag exactly matches `manifest.json`'s `version`. Do not use a leading `v`.
-- Attach `manifest.json`, `main.js`, and `styles.css` (if present) to the release as individual assets.
-- After the initial release, follow the process to add/update your plugin in the community catalog as required.
+### ID Generation
 
-## Security, privacy, and compliance
+- Uses [`MurmurHash3`](src/utils/hash_func.ts) for consistent IDs
+- Key format: `"${headingText} of ${fileName}"` or special keys (`prologue_of_${fileName}`, `full_document_${fileName}`)
 
-Follow Obsidian's **Developer Policies** and **Plugin Guidelines**. In particular:
+### Storage
 
-- Default to local/offline operation. Only make network requests when essential to the feature.
-- No hidden telemetry. If you collect optional analytics or call third-party services, require explicit opt-in and document clearly in `README.md` and in settings.
-- Never execute remote code, fetch and eval scripts, or auto-update plugin code outside of normal releases.
-- Minimize scope: read/write only what's necessary inside the vault. Do not access files outside the vault.
-- Clearly disclose any external services used, data sent, and risks.
-- Respect user privacy. Do not collect vault contents, filenames, or personal information unless absolutely necessary and explicitly consented.
-- Avoid deceptive patterns, ads, or spammy notifications.
-- Register and clean up all DOM, app, and interval listeners using the provided `register*` helpers so the plugin unloads safely.
+- **Vector Index**: `<vault>/.obsidian/plugins/Chumsa/*.hnsw` (HNSW binary)
+- **Metadata Map**: `METADATA_MAP.json` (ID → { filePath, fileName, key })
+- **Block Map**: `BLOCK_MAP.json` (ID → { key, text }, file-to-blocks index)
 
-## UX & copy guidelines (for UI text, commands, settings)
+---
 
-- Prefer sentence case for headings, buttons, and titles.
-- Use clear, action-oriented imperatives in step-by-step copy.
-- Use **bold** to indicate literal UI labels. Prefer "select" for interactions.
-- Use arrow notation for navigation: **Settings → Community plugins**.
-- Keep in-app strings short, consistent, and free of jargon.
+## Key Interfaces
 
-## Performance
+From [`src/types/structures.ts`](src/types/structures.ts):
 
-- Keep startup light. Defer heavy work until needed.
-- Avoid long-running tasks during `onload`; use lazy initialization.
-- Batch disk access and avoid excessive vault scans.
-- Debounce/throttle expensive operations in response to file system events.
-
-## Coding conventions
-
-- TypeScript with `"strict": true` preferred.
-- **Keep `main.ts` minimal**: Focus only on plugin lifecycle (onload, onunload, addCommand calls). Delegate all feature logic to separate modules.
-- **Split large files**: If any file exceeds ~200-300 lines, consider breaking it into smaller, focused modules.
-- **Use clear module boundaries**: Each file should have a single, well-defined responsibility.
-- Bundle everything into `main.js` (no unbundled runtime deps).
-- Avoid Node/Electron APIs if you want mobile compatibility; set `isDesktopOnly` accordingly.
-- Prefer `async/await` over promise chains; handle errors gracefully.
-
-## Mobile
-
-- Where feasible, test on iOS and Android.
-- Don't assume desktop-only behavior unless `isDesktopOnly` is `true`.
-- Avoid large in-memory structures; be mindful of memory and storage constraints.
-
-## Agent do/don't
-
-**Do**
-- Add commands with stable IDs (don't rename once released).
-- Provide defaults and validation in settings.
-- Write idempotent code paths so reload/unload doesn't leak listeners or intervals.
-- Use `this.register*` helpers for everything that needs cleanup.
-
-**Don't**
-- Introduce network calls without an obvious user-facing reason and documentation.
-- Ship features that require cloud services without clear disclosure and explicit opt-in.
-- Store or transmit vault contents unless essential and consented.
-
-## Common tasks
-
-### Organize code across multiple files
-
-**main.ts** (minimal, lifecycle only):
 ```ts
-import { Plugin } from "obsidian";
-import { MySettings, DEFAULT_SETTINGS } from "./settings";
-import { registerCommands } from "./commands";
+export interface EmbededData {
+    id: number;
+    vector: number[];
+    metadata: MetaData;
+}
 
-export default class MyPlugin extends Plugin {
-  settings: MySettings;
+export interface MdHeaddingBlock {
+    id: number;      // Hashed from key
+    key: string;     // "${headingText} of ${fileName}"
+    text: string;    // Markdown content
+}
 
-  async onload() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-    registerCommands(this);
-  }
+export interface MdBlocks {
+    filePath: string;
+    fileName: string;
+    blocks: MdHeaddingBlock[];
+}
+
+export interface MetaData {
+    filePath: string;
+    fileName: string;
+    key: string;
+}
+
+export interface MainDataBaseSearchResult {
+    id: number;
+    score: number;
+    metadata: MetaData;
+    block: MdHeaddingBlock;
+}
+
+export interface IVectorDB {
+    initialize(indexFilePath: string, dimensions: number, maxElements: number): Promise<boolean>;
+    addItems(data: EmbededData[]): Promise<void>;
+    search(queryVector: number[], top_k: number): Promise<VectorSearchResults>;
+    save(): Promise<void>;
+    loadMaps(): Promise<void>;
+    count(): Promise<number>;
 }
 ```
 
-**settings.ts**:
+---
+
+## Settings
+
+From [`src/settings/settings.ts`](src/settings/settings.ts):
+
 ```ts
-export interface MySettings {
-  enabled: boolean;
-  apiKey: string;
+export interface ChumsaSettings {
+    OPENAI_API_KEY: string;
+    spliter: string;          // Legacy field (e.g., "### ")
+    indexFileName: string;
+    headingLevel: HeadingLevel; // 'h1'|'h2'|'h3'|'h4'|'h5'|'h6'
 }
 
-export const DEFAULT_SETTINGS: MySettings = {
-  enabled: true,
-  apiKey: "",
+export const DEFAULT_SETTINGS: ChumsaSettings = {
+    OPENAI_API_KEY: "",
+    spliter: "### ",
+    indexFileName: "indexFile",
+    headingLevel: 'h3',
 };
 ```
 
-**commands/index.ts**:
-```ts
-import { Plugin } from "obsidian";
-import { doSomething } from "./my-command";
+**Heading Levels**:
+- [`HEADING_CONFIGS`](src/settings/settings.ts): Maps `HeadingLevel` to `{ tag, splitter, label }`
+- Used by [`parseMarkdownByHeadings`](src/utils/markdown_parser.ts) to split documents
 
-export function registerCommands(plugin: Plugin) {
-  plugin.addCommand({
-    id: "do-something",
-    name: "Do something",
-    callback: () => doSomething(plugin),
-  });
-}
-```
+---
 
-### Add a command
+## Commands & Views
+
+### Commands
+
+From [`src/main.ts`](src/main.ts):
 
 ```ts
 this.addCommand({
-  id: "your-command-id",
-  name: "Do the thing",
-  callback: () => this.doTheThing(),
+    id: "toggle-search-view",
+    name: "검색 뷰 열기/닫기",
+    callback: () => { /* Toggle SearchView */ }
 });
 ```
 
-### Persist settings
+### Search View
 
-```ts
-interface MySettings { enabled: boolean }
-const DEFAULT_SETTINGS: MySettings = { enabled: true };
+- **Type**: `SEARCH_VIEW_TYPE` ("chumsa-search-view")
+- **Location**: Right sidebar
+- **Features**:
+  - Search input with query embedding
+  - Results display with similarity scores
+  - Auto-link generation (wiki-links with headings)
+  - "Index Current File" button
 
-async onload() {
-  this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-  await this.saveData(this.settings);
-}
+---
+
+## Testing
+
+From [`src/tests/`](src/tests/):
+
+1. **[`HNSW_test_suite.ts`](src/tests/HNSW_test_suite.ts)**: HNSW adapter tests (add, search, save, load, delete)
+2. **[`block_store_test_suite.ts`](src/tests/block_store_test_suite.ts)**: Block store tests (add, retrieve, delete, file mapping)
+3. **[`metadata_store_test_suite.ts`](src/tests/metadata_store_test_suite.ts)**: Metadata store tests (add, retrieve, delete, batch operations)
+
+**Run Tests**:
+- Via command palette: "Run HNSW Test Suite" (currently disabled in main.ts)
+- Via settings tab buttons (indexing/search tests)
+
+---
+
+## Development Notes
+
+### Build System
+
+- **esbuild** with watch mode
+- **Output**: Directly to vault via `OBSIDIAN_PLUGIN_PATH`
+- **Static Files**: `manifest.json`, `styles.css` auto-copied on build
+- **API Key Injection**: `process.env.OPENAI_API_KEY` replaced at build time (esbuild `define`)
+
+### Environment
+
+Requires `.env` file:
+```env
+OBSIDIAN_PLUGIN_PATH=C:/Users/.../vault/.obsidian/plugins/Chumsa
+OPENAI_API_KEY=sk-proj-...
 ```
 
-### Register listeners safely
+### TypeScript
 
+- **Strict Mode**: Enabled with `--isolatedModules`
+- All files must be modules (have import/export)
+
+### Dependencies
+
+- **Bundled**: All deps except 'obsidian' (external)
+- **Key Deps**: hnswlib-wasm, openai, murmurhash3js-revisited
+
+### Vector Validation
+
+- Enforces dimension consistency (1536D for production, 3D for tests)
+- NaN detection before HNSW operations
+
+### Hash Function
+
+- **MurmurHash3** for consistent ID generation from block keys
+- See [`src/utils/hash_func.ts`](src/utils/hash_func.ts)
+
+---
+
+## Common Tasks
+
+### Add a New Command
+
+In [`src/main.ts`](src/main.ts):
 ```ts
-this.registerEvent(this.app.workspace.on("file-open", f => { /* ... */ }));
-this.registerDomEvent(window, "resize", () => { /* ... */ });
-this.registerInterval(window.setInterval(() => { /* ... */ }, 1000));
+this.addCommand({
+    id: "my-command-id",
+    name: "My Command Name",
+    callback: () => { /* Implementation */ }
+});
 ```
+
+### Add a New Setting
+
+1. Update [`src/settings/settings.ts`](src/settings/settings.ts):
+   ```ts
+   export interface ChumsaSettings {
+       // ... existing fields
+       newSetting: boolean;
+   }
+   
+   export const DEFAULT_SETTINGS: ChumsaSettings = {
+       // ... existing defaults
+       newSetting: false,
+   };
+   ```
+
+2. Add UI in [`src/settings/settings_tab.ts`](src/settings/settings_tab.ts):
+   ```ts
+   new Setting(containerEl)
+       .setName("New Setting")
+       .setDesc("Description")
+       .addToggle(toggle => toggle
+           .setValue(this.plugin.settings.newSetting)
+           .onChange(async (value) => {
+               this.plugin.settings.newSetting = value;
+               await this.plugin.saveSettings();
+           }));
+   ```
+
+### Add a Test Suite
+
+1. Create `src/tests/my_test_suite.ts`:
+   ```ts
+   import { App } from 'obsidian';
+   
+   export class MyTestSuite {
+       private app: App;
+       
+       constructor(app: App) {
+           this.app = app;
+       }
+       
+       async runAllTests(): Promise<void> {
+           console.log('🧪 Running My Test Suite...');
+           await this.testFeature();
+           console.log('✅ All tests passed');
+       }
+       
+       private async testFeature(): Promise<void> {
+           // Test implementation
+       }
+   }
+   ```
+
+2. Register in [`src/main.ts`](src/main.ts):
+   ```ts
+   import { MyTestSuite } from './tests/my_test_suite';
+   
+   this.addCommand({
+       id: "run-my-tests",
+       name: "Run My Test Suite",
+       callback: async () => {
+           const suite = new MyTestSuite(this.app);
+           await suite.runAllTests();
+       }
+   });
+   ```
+
+### Extend Search Functionality
+
+1. **Add Filter**: Modify [`src/services/search_filter.ts`](src/services/search_filter.ts)
+2. **Customize Linking**: Edit [`src/utils/link_generator.ts`](src/utils/link_generator.ts)
+3. **Update UI**: Modify [`src/views/search_view.ts`](src/views/search_view.ts)
+
+---
 
 ## Troubleshooting
 
-- Plugin doesn't load after build: ensure `main.js` and `manifest.json` are at the top level of the plugin folder under `<Vault>/.obsidian/plugins/<plugin-id>/`. 
-- Build issues: if `main.js` is missing, run `npm run build` or `npm run dev` to compile your TypeScript source code.
-- Commands not appearing: verify `addCommand` runs after `onload` and IDs are unique.
-- Settings not persisting: ensure `loadData`/`saveData` are awaited and you re-render the UI after changes.
-- Mobile-only issues: confirm you're not using desktop-only APIs; check `isDesktopOnly` and adjust.
+### Plugin Doesn't Load
+
+- Ensure `main.js`, `manifest.json`, `styles.css` are in `<vault>/.obsidian/plugins/Chumsa/`
+- Check Obsidian console (Ctrl+Shift+I) for errors
+- Verify plugin is enabled in **Settings → Community plugins**
+
+### Build Failures
+
+- Run `npm install` to ensure dependencies are installed
+- Check `.env` file exists with correct paths
+- If `main.js` is missing, run `npm run build`
+
+### Indexing Errors
+
+- Verify `OPENAI_API_KEY` is valid (starts with `sk-proj-`)
+- Check network connectivity
+- Ensure markdown files exist in vault
+- Review console logs for detailed error messages
+
+### Search Returns No Results
+
+- Confirm files are indexed (check `METADATA_MAP.json` size)
+- Verify HNSW index file exists (`*.hnsw`)
+- Test with known document content
+- Check [`SearchFilter`](src/services/search_filter.ts) thresholds
+
+### Memory Issues
+
+- HNSW index can be large (adjust `maxElements` in [`HNSWLibAdapter.initialize`](src/utils/hnsw_adapter.ts))
+- Consider batch processing for large vaults
+- Monitor WASM memory usage
+
+---
+
+## Security & Privacy
+
+- **Local-First**: All processing happens locally (except OpenAI API calls)
+- **API Key Storage**: Stored in plugin settings (`.obsidian/plugins/Chumsa/data.json`)
+- **Network Requests**: Only to OpenAI for embeddings (explicit user action)
+- **Data Collection**: None. No telemetry or tracking
+- **Vault Access**: Read-only for markdown files, write to plugin folder only
+
+---
+
+## Performance
+
+- **Startup**: Defer HNSW index loading until first search (lazy initialization)
+- **Batch Indexing**: Process files in configurable batches (see [`DocumentService.saveVault`](src/services/document_service.ts))
+- **WASM Performance**: HNSW operations run in WebAssembly for speed
+- **Caching**: Vector index, metadata, and blocks cached in memory after load
+
+---
+
+## Versioning & Releases
+
+- Bump `version` in [`manifest.json`](manifest.json) (SemVer: `x.y.z`)
+- Update [`versions.json`](versions.json) to map plugin version → minimum Obsidian version
+- Create GitHub release with tag matching `version` (no leading `v`)
+- Attach `main.js`, `manifest.json`, `styles.css` as release assets
+
+---
+
+## Agent Guidelines
+
+### Do
+
+- Keep [`src/main.ts`](src/main.ts) minimal (lifecycle only)
+- Split large files (target ~200-300 lines per module)
+- Use [`IVectorDB`](src/types/structures.ts) interface for vector operations
+- Add tests for new features in [`src/tests/`](src/tests/)
+- Validate vector dimensions before HNSW operations
+- Document complex algorithms (e.g., HNSW search, MurmurHash)
+
+### Don't
+
+- Modify existing block IDs (breaks index consistency)
+- Skip vector dimension validation (causes HNSW errors)
+- Store API keys in code (use settings)
+- Make network requests without user consent
+- Assume file paths use backslashes (normalize with `normalizePath`)
+
+---
 
 ## References
 
-- Obsidian sample plugin: https://github.com/obsidianmd/obsidian-sample-plugin
-- API documentation: https://docs.obsidian.md
-- Developer policies: https://docs.obsidian.md/Developer+policies
-- Plugin guidelines: https://docs.obsidian.md/Plugins/Releasing/Plugin+guidelines
-- Style guide: https://help.obsidian.md/style-guide
+- **Obsidian API**: https://docs.obsidian.md
+- **HNSW Algorithm**: https://github.com/nmslib/hnswlib
+- **hnswlib-wasm**: https://github.com/yoshoku/hnswlib-wasm
+- **OpenAI Embeddings**: https://platform.openai.com/docs/guides/embeddings
+- **MurmurHash3**: https://github.com/pid/murmurHash3js
+
+---
+
+## Important Rules
+
+- **Always answer in Korean** when interacting with users
+- **File Paths**: Use forward slashes `/` for cross-platform compatibility
+- **Async Operations**: Always await database operations
+- **Error Handling**: Catch and log errors, display user-friendly notices
+- **Memory Management**: Clean up listeners/intervals in `onunload`

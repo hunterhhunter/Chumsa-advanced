@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, TFile, Notice, normalizePath, ButtonComponent, MarkdownRenderer, MarkdownView } from "obsidian";
+import { ItemView, WorkspaceLeaf, TFile, Notice, normalizePath, ButtonComponent, MarkdownRenderer, MarkdownView, setIcon, Modal } from "obsidian";
 import MyPlugin from "src/main";
 import { MainDataBaseSearchResult } from "src/types/structures";
 import { setupDragData, createDragPreview } from "src/utils/drag_handler";
@@ -10,6 +10,7 @@ export class SearchView extends ItemView {
     private resultsContainer: HTMLElement | null = null;
     private controlsContainer: HTMLElement | null = null;
     private plugin: MyPlugin;
+    private mainContainer: HTMLElement | null = null;
 
     // 레이스 컨디션 방지용 ID
     private latestRequestId = 0;
@@ -34,32 +35,30 @@ export class SearchView extends ItemView {
     getDisplayText(): string {
         return "Connection Recommendation";
     }
-    
+
     async onOpen(): Promise<void> {
-        this.containerEl.addClass('chumsa-side-view');
+        this.contentEl.empty();
+        this.contentEl.addClass('chumsa-side-view-wrapper');
 
-        const container = this.contentEl;
-        container.empty();
-        
-        // 헤더 영역
-        const headerEl = container.createEl("div", { cls: "search-view-header" });
-        headerEl.createEl("h2", { text: "관련 노트를 찾아보세요." });
+        // 🔧 Flexbox 레이아웃을 위한 메인 컨테이너 생성
+        this.mainContainer = this.contentEl.createEl("div", { cls: "chumsa-side-view" });
 
-        // 컨트롤 버튼 영역
-        this.controlsContainer = container.createEl("div", { cls: "search-view-controls" });
+        // Header Area (Fixed)
+        const headerEl = this.mainContainer.createEl("div", { cls: "search-view-header" });
+        headerEl.createEl("h2", { text: "Discover Related Notes" });
+
+        // 컨트롤 버튼 영역 (고정)
+        this.controlsContainer = this.mainContainer.createEl("div", { cls: "search-view-controls" });
         this.createControlButtons();
 
-        // 구분선
-        container.createEl("hr", { cls: "search-view-divider" });
-        
-        // 결과 컨테이너 생성
-        this.resultsContainer = container.createEl("div", { cls: "search-results-container" });
-        
+        // 결과 컨테이너 (스크롤 가능)
+        this.resultsContainer = this.mainContainer.createEl("div", { cls: "search-results-container" });
+
         // 초기 안내 혹은 버퍼된 결과 표시
         if (this.lastResults && this.lastResults.length > 0) {
             await this.displaySearchResults(this.lastResults);
         } else {
-            this.showEmptyState("헤딩 옆의 검색 아이콘을 클릭하여 관련 노트를 찾아보세요.");
+            this.showEmptyState("Click the search icon next to a heading to find related notes.");
         }
     }
 
@@ -70,18 +69,34 @@ export class SearchView extends ItemView {
 
         const buttonsRow = this.controlsContainer.createEl("div", { cls: "control-buttons-row" });
 
-        // 버튼 1: 현재 파일 인덱싱
+        // Button 1: Index Current File
         new ButtonComponent(buttonsRow)
-            .setButtonText("🔄 현재 파일")
-            .setTooltip("현재 열린 파일을 인덱싱합니다")
+            .setButtonText("🔄 Current File")
+            .setTooltip("Index the currently open file")
             .onClick(async () => {
                 await this.indexCurrentFile();
             });
 
-        // 버튼 2: 인덱스 초기화
+        // Button 2: Auto Tag
         new ButtonComponent(buttonsRow)
-            .setButtonText("🗑️ 초기화")
-            .setTooltip("인덱스를 초기화합니다")
+            .setButtonText("🏷️ Auto Tag")
+            .setTooltip("Generate tags for the current file")
+            .onClick(async () => {
+                await this.generateAutoTags();
+            });
+
+        // Button 3: Full Indexing (Updated)
+        new ButtonComponent(buttonsRow)
+            .setButtonText("📚 Full Index")
+            .setTooltip("Embed all files in the vault")
+            .onClick(async () => {
+                await this.indexAllFiles();
+            });
+
+        // Button 4: Reset Index
+        new ButtonComponent(buttonsRow)
+            .setButtonText("🗑️ Reset")
+            .setTooltip("Reset the index database")
             .setWarning()
             .onClick(async () => {
                 await this.resetDatabase();
@@ -90,6 +105,8 @@ export class SearchView extends ItemView {
 
     async onClose(): Promise<void> {
         this.resultsContainer = null;
+        this.controlsContainer = null;
+        this.mainContainer = null;
         this.lastResults = null;
         this.latestRequestId = 0;
     }
@@ -118,7 +135,7 @@ export class SearchView extends ItemView {
         this.resultsContainer.empty();
 
         if (results.length === 0) {
-            this.showEmptyState("검색 결과가 없습니다.");
+            this.showEmptyState("No search results found.");
             return;
         }
 
@@ -168,14 +185,14 @@ export class SearchView extends ItemView {
         this.resultsContainer.empty();
 
         if (results.length === 0) {
-            this.showEmptyState("관련 노트를 찾을 수 없습니다.");
-            console.log("검색 결과 없음");
+            this.showEmptyState("No related notes found.");
+            console.log("No search results");
             return;
         }
 
-        // 결과 헤더
+        // Result Header
         const resultHeader = this.resultsContainer.createEl("div", { cls: "search-results-header" });
-        resultHeader.createEl("h3", { text: `${results.length}개의 관련 노트` });
+        resultHeader.createEl("h3", { text: `${results.length} Related Notes` });
 
         // 각 결과를 카드로 렌더링
         for (const result of results) {
@@ -199,31 +216,31 @@ export class SearchView extends ItemView {
 
         // 메타데이터 영역
         const metaEl = card.createEl("div", { cls: "result-meta" });
-        
+
         // 🔧 link_generator 함수 사용
         const fileName = cleanFileName(result.metadata.fileName);
         const fileNameEl = metaEl.createEl("strong", { cls: "result-filename" });
         fileNameEl.setText(fileName);
-        
+
         metaEl.createEl("span", { text: " / ", cls: "result-separator" });
 
         // 키 정보
         const keyParts = result.metadata.key.split('/').slice(1).join('/') || result.metadata.key;
         const displayKey = keyParts.split('of')[0].trim();
-        
-        metaEl.createEl("span", { 
+
+        metaEl.createEl("span", {
             text: displayKey,
-            cls: "result-key" 
+            cls: "result-key"
         });
 
-        // 유사도 점수
+        // Similarity Score
         const scorePercentage = (result.score * 100).toFixed(1);
         const scoreEl = card.createEl("div", { cls: "result-score" });
-        scoreEl.setText(`유사도: ${scorePercentage}%`);
-        
+        scoreEl.setText(`Similarity: ${scorePercentage}%`);
+
         const scoreValue = parseFloat(scorePercentage);
         let scoreClass = "score-low";
-        
+
         if (scoreValue >= this.SCORE_THRESHOLDS.HIGH) {
             scoreClass = "score-high";
         } else if (scoreValue >= this.SCORE_THRESHOLDS.MEDIUM) {
@@ -235,9 +252,9 @@ export class SearchView extends ItemView {
         // 블록 내용 미리보기
         if (result.block && result.block.text) {
             const previewEl = card.createEl("div", { cls: "result-preview" });
-            
+
             let previewText = this.preparePreviewText(result.block.text);
-            
+
             try {
                 await MarkdownRenderer.render(
                     this.app,
@@ -246,13 +263,13 @@ export class SearchView extends ItemView {
                     result.metadata.filePath,
                     this
                 );
-                
+
                 previewEl.querySelectorAll('a').forEach(link => {
                     link.setAttribute('tabindex', '-1');
                 });
 
                 previewEl.querySelectorAll('.heading-collapse-indicator').forEach(el => el.remove());
-                
+
             } catch (error) {
                 console.error('Markdown 렌더링 실패:', error);
                 previewEl.setText(previewText);
@@ -280,20 +297,20 @@ export class SearchView extends ItemView {
 
             // 🔧 간단한 드래그 데이터 설정
             const linkText = setupDragData(event.dataTransfer, result, false);
-            
+
             // 🔧 프리뷰 생성 (더 안정적인 방식)
             const preview = createDragPreview(result);
-            
+
             // 🔧 타이밍 조정 - 프리뷰가 DOM에 추가된 후 설정
             requestAnimationFrame(() => {
                 if (event.dataTransfer) {
                     event.dataTransfer.setDragImage(preview, 20, 20);
                 }
             });
-            
+
             element.addClass('dragging');
             element.style.cursor = 'grabbing';
-            
+
             console.log(`[Drag] 시작: ${linkText}`);
         });
 
@@ -309,7 +326,7 @@ export class SearchView extends ItemView {
      */
     private preparePreviewText(text: string): string {
         const MAX_LENGTH = 200;
-        
+
         let cleaned = text
             .replace(/!\[\[.*?\]\]/g, '')
             .replace(/!\[.*?\]\(.*?\)/g, '')
@@ -323,7 +340,7 @@ export class SearchView extends ItemView {
                 return match.slice(2, -2);
             })
             .trim();
-        
+
         if (cleaned.length > MAX_LENGTH) {
             cleaned = cleaned.substring(0, MAX_LENGTH);
             const lastSpace = cleaned.lastIndexOf(' ');
@@ -332,7 +349,7 @@ export class SearchView extends ItemView {
             }
             cleaned += '...';
         }
-        
+
         return cleaned;
     }
 
@@ -343,7 +360,7 @@ export class SearchView extends ItemView {
         try {
             // 🔧 link_generator 함수 사용
             const heading = extractHeadingFromKey(result.metadata.key);
-            
+
             if (!heading) {
                 await this.app.workspace.openLinkText(
                     result.metadata.filePath,
@@ -355,9 +372,9 @@ export class SearchView extends ItemView {
             }
 
             const linkText = `${result.metadata.filePath}#${heading}`;
-            
+
             console.log(`[SearchView] 링크로 이동: ${linkText}`);
-            
+
             await this.app.workspace.openLinkText(
                 linkText,
                 "",
@@ -393,7 +410,7 @@ export class SearchView extends ItemView {
 
         this.resultsContainer.empty();
         const loadingEl = this.resultsContainer.createEl("div", { cls: "search-loading" });
-        loadingEl.createEl("p", { text: "검색 중..." });
+        loadingEl.createEl("p", { text: "Searching..." });
     }
 
     /**
@@ -410,7 +427,7 @@ export class SearchView extends ItemView {
     private async indexCurrentFile(): Promise<void> {
         const file = this.app.workspace.getActiveFile();
         if (!file) {
-            new Notice("열린 파일이 없습니다.");
+            new Notice("No active file.");
             return;
         }
 
@@ -425,26 +442,26 @@ export class SearchView extends ItemView {
             const startTime = Date.now();
             if (fileBlocks.length > 0) {
                 new Notice(
-                    `현재 상태: ${fileBlocks.length}개 블록 인덱싱됨\n` +
-                    `업데이트를 시작합니다...`
+                    `Status: ${fileBlocks.length} blocks indexed\n` +
+                    `Starting update...`
                 );
                 await this.plugin.documentService.updateOneDocument(
                     file.path,
                     this.plugin.settings.spliter
                 );
             } else {
-                new Notice(`인덱싱 시작: ${file.name}`);
+                new Notice(`Indexing started: ${file.name}`);
                 await this.plugin.documentService.saveOneDocument(
                     file.path,
                     this.plugin.settings.spliter
                 );
             }
             const duration = Date.now() - startTime;
-            new Notice(`✅ 인덱싱 완료: ${file.name} (${duration}ms)`);
+            new Notice(`✅ Indexing Complete: ${file.name} (${duration}ms)`);
         } catch (error) {
-            console.error("인덱싱 실패:", error);
-            const errorMsg = error instanceof Error ? error.message : "알 수 없는 오류";
-            new Notice(`❌ 인덱싱 실패: ${errorMsg}`);
+            console.error("Indexing failed:", error);
+            const errorMsg = error instanceof Error ? error.message : "Unknown error";
+            new Notice(`❌ Indexing Failed: ${errorMsg}`);
         }
     }
 
@@ -458,27 +475,193 @@ export class SearchView extends ItemView {
         }
 
         const confirmed = confirm(
-            "⚠️ 경고: 모든 인덱스 데이터가 삭제됩니다.\n\n" +
-            "계속하시겠습니까?"
+            "⚠️ Warning: All index data will be deleted.\n\n" +
+            "Do you want to continue?"
         );
         if (!confirmed) return;
 
         try {
-            new Notice("데이터베이스 초기화 중...");
-            
+            new Notice("Resetting database...");
+
             if (typeof this.plugin.documentService.resetDatabase === 'function') {
                 await this.plugin.documentService.resetDatabase();
             } else {
                 this.plugin.documentService = null;
                 await this.plugin['tryInitializeDocumentService'](true);
             }
-            
-            this.showEmptyState("데이터베이스가 초기화되었습니다.");
-            new Notice("✅ 데이터베이스 초기화 완료");
+
+            this.showEmptyState("Database has been reset.");
+            new Notice("✅ Database Reset Complete");
         } catch (error) {
-            console.error("데이터베이스 초기화 실패:", error);
-            const errorMsg = error instanceof Error ? error.message : "알 수 없는 오류";
-            new Notice(`❌ 초기화 실패: ${errorMsg}`);
+            console.error("Database reset failed:", error);
+            const errorMsg = error instanceof Error ? error.message : "Unknown Error";
+            new Notice(`❌ Reset Failed: ${errorMsg}`);
         }
+    }
+
+    /**
+     * 자동 태그 생성
+     */
+    private async generateAutoTags(): Promise<void> {
+        const activeFile = this.app.workspace.getActiveFile();
+        if (!activeFile) {
+            new Notice("열린 파일이 없습니다.");
+            return;
+        }
+
+        if (!this.plugin.documentService) {
+            new Notice("먼저 설정에서 DocumentService를 초기화하세요.");
+            return;
+        }
+
+        try {
+            new Notice(`Generating auto tags for "${activeFile.basename}"...`);
+
+            const result = await this.plugin.documentService.generateAndApplyAutoTags(
+                activeFile.path,
+                {
+                    maxTags: this.plugin.settings.autoTagMaxTags || 8,
+                    language: this.plugin.settings.autoTagLanguage || 'ko',
+                    includeReasoning: false
+                }
+            );
+
+            if (result.addedTags.length > 0) {
+                new Notice(
+                    `✅ ${result.addedTags.length} tags added\n${result.addedTags.join(', ')}`,
+                    5000
+                );
+            } else {
+                new Notice(
+                    `ℹ️ No new tags to add\nGenerated tags: ${result.generatedTags.join(', ')}`,
+                    4000
+                );
+            }
+
+            console.log('[SearchView] Auto Tag Result:', result);
+
+        } catch (error) {
+            console.error("Auto tag generation failed:", error);
+            const errorMsg = error instanceof Error ? error.message : "Unknown error";
+            new Notice(`❌ Auto Tag Generation Failed: ${errorMsg}`);
+        }
+    }
+
+    /**
+     * 볼트 전체 파일 임베딩
+     */
+    private async indexAllFiles(): Promise<void> {
+        if (!this.plugin.documentService) {
+            new Notice("먼저 설정에서 DocumentService를 초기화하세요.");
+            return;
+        }
+
+        const confirmed = await this.confirmBulkIndexing();
+        if (!confirmed) return;
+
+        try {
+            const allFiles = this.app.vault.getMarkdownFiles();
+            const totalFiles = allFiles.length;
+
+            if (totalFiles === 0) {
+                new Notice("No markdown files to index.");
+                return;
+            }
+
+            new Notice(`📚 Full Indexing Started: ${totalFiles} files`);
+            console.log(`[SearchView] Full Indexing Started: ${totalFiles} files`);
+
+            const startTime = Date.now();
+
+            // 🔧 Use Result
+            const result = await this.plugin.documentService.saveVault(
+                allFiles,
+                10,
+                this.plugin.settings.spliter
+            );
+
+            const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+
+            // 🔧 Display Success/Fail separately
+            if (result.failCount === 0) {
+                new Notice(
+                    `✅ Full Indexing Complete!\n` +
+                    `Processed: ${result.successCount} files\n` +
+                    `Duration: ${duration}s`,
+                    6000
+                );
+            } else {
+                new Notice(
+                    `⚠️ Indexing Completed (Some failed)\n` +
+                    `Success: ${result.successCount}\n` +
+                    `Failed: ${result.failCount}\n` +
+                    `Duration: ${duration}s`,
+                    8000
+                );
+
+                // Failed files log
+                console.warn('[SearchView] Failed Files:', result.failedFiles);
+            }
+
+            console.log(`[SearchView] ✅ Full Indexing Complete: ${result.successCount}/${totalFiles}, ${duration}s`);
+
+            this.showEmptyState(
+                `✅ ${result.successCount} files indexed\n` +
+                (result.failCount > 0 ? `⚠️ ${result.failCount} files failed\n` : '') +
+                `Click the search icon next to a heading to find related documents.`
+            );
+
+        } catch (error) {
+            console.error("[SearchView] Full Indexing Failed:", error);
+            const errorMsg = error instanceof Error ? error.message : "Unknown error";
+            new Notice(`❌ Full Indexing Failed: ${errorMsg}`, 5000);
+        }
+    }
+
+    /**
+     * 🆕 전체 임베딩 확인 모달
+     */
+    private async confirmBulkIndexing(): Promise<boolean> {
+        return new Promise((resolve) => {
+            const modal = new Modal(this.app);
+            modal.titleEl.setText("Embed All Files");
+
+            const totalFiles = this.app.vault.getMarkdownFiles().length;
+
+            modal.contentEl.createEl("p", {
+                text: `Embedding all markdown files (${totalFiles}) in the vault.`
+            });
+
+            modal.contentEl.createEl("p", {
+                text: "⚠️ This may take a while and will consume OpenAI API credit.",
+                cls: "mod-warning"
+            });
+
+            modal.contentEl.createEl("p", {
+                text: `Estimated time: about ${Math.ceil(totalFiles / 10)} min`,
+                cls: "setting-item-description"
+            });
+
+            const buttonContainer = modal.contentEl.createDiv("modal-button-container");
+
+            const confirmButton = buttonContainer.createEl("button", {
+                text: "Start Embedding",
+                cls: "mod-cta"
+            });
+            confirmButton.addEventListener("click", () => {
+                modal.close();
+                resolve(true);
+            });
+
+            const cancelButton = buttonContainer.createEl("button", {
+                text: "Cancel"
+            });
+            cancelButton.addEventListener("click", () => {
+                modal.close();
+                resolve(false);
+            });
+
+            modal.open();
+        });
     }
 }

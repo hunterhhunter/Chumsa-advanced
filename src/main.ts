@@ -5,85 +5,114 @@ import { SearchView, SEARCH_VIEW_TYPE } from './views/search_view';
 import { ChumsaSettings, DEFAULT_SETTINGS, getHeadingConfig, HeadingLevel } from './settings/settings';
 import { ChumsaSettingTab } from './settings/settings_tab';
 import { SearchFilter } from './services/search_filter';
+import { AI_CHAT_VIEW_TYPE, AIChatView } from './views/ai_chat_view';
 
 
 dotenv.config();
 
 export default class MyPlugin extends Plugin {
-	settings: ChumsaSettings;
-	documentService: DocumentService | null = null;
+    settings: ChumsaSettings;
+    public documentService: DocumentService | null = null;
     searchFilter: SearchFilter | null = null;
-	// 검색 레이스 컨디션 방지용 ID 관리 변수
-	private searchRequestSeq = 0;
+    // 검색 레이스 컨디션 방지용 ID 관리 변수
+    private searchRequestSeq = 0;
 
-	async onload() {
-		await this.loadSettings();
-		await this.tryInitializeDocumentService();
+    async onload() {
+        console.log('[Main] ===== Plugin Load Start =====');
+
+        await this.loadSettings();
+        console.log('[Main] ✅ Settings Loaded');
+        console.log(`[Main] API Key Exists: ${!!this.settings.OPENAI_API_KEY}`);
+        console.log(`[Main] API Key Length: ${this.settings.OPENAI_API_KEY?.length || 0}`);
+
+        await this.tryInitializeDocumentService();
+        console.log(`[Main] DocumentService Initialized: ${!!this.documentService}`);
+
         this.initializeSearchFilter();
+        console.log(`[Main] SearchFilter Initialized: ${!!this.searchFilter}`);
 
-		// --------------------- SEARCH_VIEW 관련 로직 ---------------------
-		// SEARCH_VIEW를 등록
-		this.registerView(SEARCH_VIEW_TYPE, (leaf) => new SearchView(leaf, this));
 
-		// SEARCH_VIEW를 열기 위한 리본아이콘 등록
-		this.addRibbonIcon(
-			"brain-circuit", "첨사: 검색 뷰 열기", () => this.activateSearchView()
-		);
 
-		this.registerMarkdownPostProcessor((element, context) => {
-			// 설정 내 spliter 레벨 가져오기
-			const cfg = getHeadingConfig(this.settings.headingLevel);
+        // --------------------- SEARCH_VIEW Logic ---------------------
+        // Register SEARCH_VIEW
+        this.registerView(SEARCH_VIEW_TYPE, (leaf) => new SearchView(leaf, this));
 
-			// 랜더링된 요소 내에서 spliter 태그 찾기
-			const headings = element.querySelectorAll(cfg.tag);
-			
-			headings.forEach(headings => {
-				if (headings.querySelector(".search-icon")) {
-					return;
-				}
+        // Register Ribbon Icon to open SEARCH_VIEW
+        this.addRibbonIcon(
+            "brain-circuit", "Chumsa: Open Search View", () => this.activateSearchView()
+        );
 
-				const iconEl = headings.createEl('span', {
-					cls: 'search-icon',				   // css 스타일링을 위한 클래스
-					attr: {
-						'aria-label': "관련 자료 검색", // 마우스 호버링시 나올 툴팁
-						
-					}
-				});
+        this.registerMarkdownPostProcessor((element, context) => {
+            // Get spliter level from settings
+            const cfg = getHeadingConfig(this.settings.headingLevel);
 
-				setIcon(iconEl, 'link');
+            // Find spliter tags within rendered element
+            const headings = element.querySelectorAll(cfg.tag);
 
-				// 아이콘 클릭시 실행할 이벤트 등록
-				this.registerDomEvent(iconEl, 'click', async (event: MouseEvent) => {
+            headings.forEach(headings => {
+                if (headings.querySelector(".search-icon")) {
+                    return;
+                }
+
+                const iconEl = headings.createEl('span', {
+                    cls: 'search-icon',				   // class for css styling
+                    attr: {
+                        'aria-label': "Search Related Material", // Tooltip on hover
+
+                    }
+                });
+
+                setIcon(iconEl, 'link');
+
+                // Register event to execute on icon click
+                this.registerDomEvent(iconEl, 'click', async (event: MouseEvent) => {
                     event.preventDefault();
                     event.stopPropagation();
                     await this.handleHeadingSearch(headings, context);
                 });
-			})
-		});
+            })
+        });
 
-		this.addSettingTab(new ChumsaSettingTab(this.app, this));
-	}
+        this.addSettingTab(new ChumsaSettingTab(this.app, this));
+    }
 
-	/**
-     * 헤딩 검색 핸들러 (품질 필터링 적용)
-     */
     private async handleHeadingSearch(
         heading: Element,
         context: any
     ): Promise<void> {
+        const headingText = heading.textContent || "";
+        const fileName = context.sourcePath?.split('/').pop()?.replace('.md', '') || 'unknown';
+
+        console.log('[Main] ===== Heading Search Start =====');
+        console.log(`[Main] Original Heading Text: "${headingText}"`);
+        console.log(`[Main] FileName: "${fileName}"`);
+        console.log(`[Main] Full Path: "${context.sourcePath}"`);
+
+        // 🔧 Strengthen Input Validation
+        if (!headingText || headingText.trim().length === 0) {
+            console.error('[Main] Search Fail: Empty Heading');
+            new Notice('No heading text to search.');
+            return;
+        }
+
+        if (!fileName || fileName === 'unknown') {
+            console.error('[Main] Search Fail: FileName Extraction Failed');
+            console.error('[Main] context.sourcePath:', context.sourcePath);
+            new Notice('Cannot verify file name.');
+            return;
+        }
+
         if (!this.documentService) {
-            new Notice('먼저 DocumentService를 초기화해주세요.');
+            console.error('[Main] Search Fail: DocumentService not initialized');
+            new Notice('Please enter OpenAI API Key in Settings first.');
             return;
         }
 
-        if (!this.searchFilter) {
-            new Notice('SearchFilter가 초기화되지 않았습니다.');
-            return;
-        }
-
+        // Open SearchView
         const searchView = await this.activateSearchView();
         if (!searchView) {
-            new Notice('검색 뷰를 열 수 없습니다.');
+            console.error('[Main] SearchView Activation Failed');
+            new Notice('Cannot open Search View.');
             return;
         }
 
@@ -91,85 +120,80 @@ export default class MyPlugin extends Plugin {
         searchView.showLoadingSafe(requestId);
 
         try {
-            const sectionInfo = context.getSectionInfo(heading as HTMLElement);
-            if (!sectionInfo) {
-                searchView.showErrorSafe("헤딩 정보를 가져올 수 없습니다.", requestId);
-                return;
-            }
+            console.log('[Main] Calling DocumentService.searchSimilarBlocks...');
 
-            const lines = sectionInfo.text.split('\n');
-            const clickLineText = lines[sectionInfo.lineStart];
-
-            if (!clickLineText) {
-                searchView.showErrorSafe("헤딩 텍스트를 가져올 수 없습니다.", requestId);
-                return;
-            }
-
-            const file = this.app.vault.getAbstractFileByPath(context.sourcePath);
-            const fileName = file ? file.name : context.sourcePath.split('/').pop()!;
-            const currentFilePath = context.sourcePath;
-
-            console.log(`검색 시작 - 파일: ${fileName}, 헤딩: ${clickLineText}`);
-
-            // 50개 검색 (필터링 전)
-            const rawResults = await this.documentService.searchSimilarBlocks(
+            const results = await this.documentService.searchSimilarBlocks(
                 fileName,
-                clickLineText,
+                headingText,
                 this.settings.spliter,
                 50
             );
 
-            console.log(`원본 검색 결과: ${rawResults.length}개`);
+            console.log(`[Main] ✅ Search Success: ${results.length} results`);
 
-            // 쿼리에서 태그 추출
-            const queryTags = this.searchFilter.extractTagsFromText(clickLineText);
+            // Quality Filtering
+            const filteredResults = this.searchFilter?.filterResults(results, [], context.sourcePath) || results;
+            console.log(`[Main] Results after filtering: ${filteredResults.length}`);
 
-            // 품질 필터링 적용
-            const filteredResults = this.searchFilter.filterResults(
-                rawResults,
-                queryTags,
-                currentFilePath
-            );
-
-            console.log(`필터링 후 결과: ${filteredResults.length}개`);
-
-            // 결과를 SearchView에 전달
+            // Send results to SearchView
             await searchView.setResults(filteredResults, requestId);
 
         } catch (error) {
-            console.error('검색 중 오류 발생:', error);
-            const errorMsg = error instanceof Error ? error.message : "알 수 없는 오류";
-            searchView.showErrorSafe(`검색 실패: ${errorMsg}`, requestId);
+            console.error('[Main] ===== Search Failed =====');
+            console.error('[Main] Error Detail:', error);
+
+            // 🔧 Messages by Error Type
+            let errorMessage = 'An error occurred during search.';
+
+            if (error instanceof Error) {
+                console.error('[Main] Error Message:', error.message);
+                console.error('[Main] Error Stack:', error.stack);
+
+                if (error.message.includes('빈 텍스트') || error.message.includes('Empty text')) {
+                    errorMessage = 'Search text is empty. Check the heading.';
+                } else if (error.message.includes('임베딩') || error.message.includes('Embedding')) {
+                    errorMessage = 'Embedding generation failed. Check API Key.';
+                } else if (error.message.includes('네트워크') || error.message.includes('API') || error.message.includes('Network')) {
+                    errorMessage = 'Network error. Check internet connection.';
+                } else if (error.message.includes('인덱스') || error.message.includes('Index')) {
+                    errorMessage = 'Index error. Please re-index the file.';
+                }
+            }
+
+            searchView.showErrorSafe(errorMessage, requestId);
+            new Notice(`❌ ${errorMessage}`);
         }
     }
 
-	onunload() {
-		// 정리 작업
-		this.searchRequestSeq = 0;
-	}
+    onunload() {
+        // Cleanup
+        this.searchRequestSeq = 0;
+        // 🔧 Clean up AI Chat View
+        this.app.workspace.detachLeavesOfType(AI_CHAT_VIEW_TYPE);
+    }
 
-	async loadSettings() {
-    const raw = await this.loadData();
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, raw);
+    async loadSettings() {
+        const raw = await this.loadData();
+        this.settings = Object.assign({}, DEFAULT_SETTINGS, raw);
 
-		// 마이그레이션: headingLevel 없고 spliter만 있을 때 유추
-		if (!this.settings.headingLevel) {
-			const m = (this.settings.spliter || "### ").trim();
-			const map: Record<string, 'h1'|'h2'|'h3'|'h4'|'h5'|'h6'> = {
-				'#': 'h1','##': 'h2','###': 'h3','####': 'h4','#####': 'h5','######': 'h6'
-			};
-			this.settings.headingLevel = map[m.replace(/\s+$/, '')] ?? 'h3';
-			// 동기화
-			this.settings.spliter = getHeadingConfig(this.settings.headingLevel).splitter;
-			await this.saveSettings();
-		}
-	}
+        // Migration: Infer if headingLevel is missing but spliter exists
+        if (!this.settings.headingLevel) {
+            const m = (this.settings.spliter || "### ").trim();
+            const map: Record<string, 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6'> = {
+                '#': 'h1', '##': 'h2', '###': 'h3', '####': 'h4', '#####': 'h5', '######': 'h6'
+            };
+            this.settings.headingLevel = map[m.replace(/\s+$/, '')] ?? 'h3';
+            // Sync
+            this.settings.spliter = getHeadingConfig(this.settings.headingLevel).splitter;
+            await this.saveSettings();
+        }
+    }
 
-	async saveSettings() {
-		await this.saveData(this.settings);
-	}
+    async saveSettings() {
+        await this.saveData(this.settings);
+    }
 
-	/**
+    /**
      * SearchView를 활성화하고 인스턴스를 반환
      * @returns SearchView 인스턴스 또는 null
      */
@@ -191,92 +215,104 @@ export default class MyPlugin extends Plugin {
             type: SEARCH_VIEW_TYPE,
             active: true
         });
-        
+
         await this.app.workspace.revealLeaf(leaf);
-        
+
         return leaf.view as SearchView;
     }
 
-	private async tryInitializeDocumentService(force = false): Promise<void> {
-        const apiKey = this.settings.OPENAI_API_KEY?.trim();
-        if (!apiKey) {
-            new Notice('OpenAI API Key가 설정되어 있지 않습니다. 설정에서 입력하세요.');
+    private async tryInitializeDocumentService(force = false): Promise<void> {
+        console.log('[Main] tryInitializeDocumentService Start');
+        console.log(`[Main] force: ${force}, Existing Service: ${!!this.documentService}`);
+
+        if (!this.settings.OPENAI_API_KEY) {
+            console.warn('[Main] No API Key, Skipping DocumentService Initialization');
+            new Notice('Please enter OpenAI API Key in Settings.');
             return;
         }
+
         if (this.documentService && !force) {
-            // 이미 초기화됨
+            console.log('[Main] DocumentService Already Initialized, Skipping');
             return;
         }
+
         try {
-            // 기존 인스턴스가 있으면 교체
-            this.documentService = new DocumentService(this.app, apiKey, "iiiidd");
-            new Notice('DocumentService가 초기화되었습니다.');
+            console.log('[Main] Creating DocumentService...');
+
+            this.documentService = new DocumentService(
+                this.app,
+                this.settings.OPENAI_API_KEY,
+                this.settings.indexFileName
+            );
+
+            console.log('[Main] ✅ DocumentService Initialization Complete');
+
         } catch (error) {
-            const msg = error instanceof Error ? error.message : String(error);
-            console.error('DocumentService 초기화 실패:', error);
-            new Notice(`DocumentService 초기화 실패: ${msg}`);
+            console.error('[Main] DocumentService Initialization Failed:', error);
+            new Notice(`Service Initialization Failed: ${(error as Error).message}`);
+            this.documentService = null;
         }
     }
 
     /**
-     * SearchFilter 초기화
+     * Initialize SearchFilter
      */
     private initializeSearchFilter(): void {
         this.searchFilter = new SearchFilter(this.app);
-        console.log('SearchFilter 초기화 완료');
+        console.log('SearchFilter Initialization Complete');
     }
 
     public async handleHeadingLevelChange(level: HeadingLevel): Promise<void> {
-    const cfg = getHeadingConfig(level);
-    try {
-        // 1) DocumentService 재초기화
-        await this.tryInitializeDocumentService(true);
+        const cfg = getHeadingConfig(level);
+        try {
+            // 1) Re-initialize DocumentService
+            await this.tryInitializeDocumentService(true);
 
-        if (!this.documentService) {
-            new Notice("DocumentService 초기화 실패로 재인덱싱을 건너뜁니다.");
-            return;
-        }
+            if (!this.documentService) {
+                new Notice("DocumentService initialization failed. Skipping re-indexing.");
+                return;
+            }
 
-        // 2) DB 초기화(+ 선택) 후 전체 재인덱싱
-        await this.documentService.resetDatabase();
-        const files = this.app.vault.getMarkdownFiles();
-        if (files.length > 0) {
-            new Notice(`전체 재인덱싱 시작 (${files.length}개)…`);
-            await this.documentService.saveVault(files, 10, cfg.splitter);
-            new Notice("전체 재인덱싱 완료");
-        }
+            // 2) Initialize DB (+ select) and re-index all
+            await this.documentService.resetDatabase();
+            const files = this.app.vault.getMarkdownFiles();
+            if (files.length > 0) {
+                new Notice(`Starting Full Re-indexing (${files.length} files)...`);
+                await this.documentService.saveVault(files, 10, cfg.splitter);
+                new Notice("Full Re-indexing Complete");
+            }
 
-        // 3) 모든 Markdown 뷰 재렌더링
-        await this.rerenderAllMarkdownViews();
+            // 3) Re-render all Markdown views
+            await this.rerenderAllMarkdownViews();
 
         } catch (e) {
-            console.error("헤딩 레벨 변경 처리 중 오류:", e);
-            new Notice("헤딩 레벨 변경 처리 실패. 콘솔 로그를 확인하세요.");
+            console.error("Error during heading level change:", e);
+            new Notice("Failed to change heading level. Check console logs.");
         }
     }
 
     /**
-     * 마크다운 문서 껐다 켜서 강제 재랜더링
+     * Force re-render markdown documents by toggling them
      */
     private async rerenderAllMarkdownViews(): Promise<void> {
         const openFiles: TFile[] = [];
         const leaves = this.app.workspace.getLeavesOfType("markdown");
-        
+
         for (const leaf of leaves) {
             const view = leaf.view as MarkdownView;
             if (view.file) {
                 openFiles.push(view.file);
             }
         }
-        
+
         // 모든 마크다운 탭 닫기
         for (const leaf of leaves) {
             leaf.detach();
         }
-        
+
         // 약간의 딜레이 후 다시 열기
         await new Promise(resolve => setTimeout(resolve, 100));
-        
+
         // 파일들을 다시 열기
         for (const file of openFiles) {
             await this.app.workspace.getLeaf(false).openFile(file);

@@ -1,12 +1,12 @@
 {
 	"id": "chumsa-plugin",
-	"name": "첨사 플러그인",
+	"name": "Chumsa Plugin",
 	"version": "1.0.0",
 	"minAppVersion": "1.4.0",
-	"description": "연결 추천 파트너",
+	"description": "Connection Recommendation Partner",
 	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"authorUrl": "https://github.com/hunterhhunter",
+	"fundingUrl": "",
 	"isDesktopOnly": false,
 	"cssFile": "style.css"
 }
