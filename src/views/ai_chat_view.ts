@@ -19,7 +19,7 @@ export class AIChatView extends ItemView {
     }
 
     getDisplayText(): string {
-        return "AI 채팅";
+        return "AI Chat";
     }
 
     getIcon(): string {
@@ -36,14 +36,14 @@ export class AIChatView extends ItemView {
 
         // 입력 영역
         const inputContainer = container.createDiv({ cls: 'ai-chat-input-container' });
-        
+
         const input = inputContainer.createEl('textarea', {
             cls: 'ai-chat-input',
-            attr: { placeholder: '메시지를 입력하세요...' }
+            attr: { placeholder: 'Type a message...' }
         });
 
         const sendButton = inputContainer.createEl('button', {
-            text: '전송',
+            text: 'Send',
             cls: 'ai-chat-send-button'
         });
 
@@ -53,22 +53,22 @@ export class AIChatView extends ItemView {
             if (!message) return;
 
             input.value = '';
-            
+
             // 사용자 메시지 추가
             this.addMessage('user', message);
 
             try {
-                // AI 응답 생성
+                // Generate AI Response
                 const response = await this.getAIResponse(message);
                 this.addMessage('assistant', response);
             } catch (error) {
-                new Notice('AI 응답 생성 실패');
+                new Notice('Failed to generate AI response');
                 console.error(error);
             }
         };
 
         sendButton.addEventListener('click', handleSend);
-        
+
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
                 e.preventDefault();
@@ -84,7 +84,7 @@ export class AIChatView extends ItemView {
             cls: `ai-chat-message ai-chat-message-${role}`
         });
 
-        messageEl.createDiv({ cls: 'ai-chat-message-role', text: role === 'user' ? '사용자' : 'AI' });
+        messageEl.createDiv({ cls: 'ai-chat-message-role', text: role === 'user' ? 'User' : 'AI' });
         messageEl.createDiv({ cls: 'ai-chat-message-text', text });
 
         // 스크롤 하단으로
@@ -99,7 +99,7 @@ export class AIChatView extends ItemView {
         const chatMessages: ChatMessage[] = [
             {
                 role: 'system',
-                content: '당신은 Obsidian 볼트의 지식 관리 어시스턴트입니다. 간결하고 명확하게 답변하며, 마크다운 형식을 사용합니다.'
+                content: 'You are a knowledge management assistant for the Obsidian vault. Answer concisely and clearly, using markdown format.'
             },
             ...this.messages.slice(-10).map(msg => ({
                 role: msg.role as 'user' | 'assistant',

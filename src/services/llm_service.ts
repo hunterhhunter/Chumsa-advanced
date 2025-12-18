@@ -1,8 +1,8 @@
 import OpenAI from "openai";
-import { 
-    ILLMService, 
-    EmbededData, 
-    MdBlocks, 
+import {
+    ILLMService,
+    EmbededData,
+    MdBlocks,
     MdHeaddingBlock,
     AutoTagOptions,
     AutoTagResponse,
@@ -12,9 +12,9 @@ import {
 import { ItemView } from "obsidian";
 
 /**
- * OpenAI 기반 LLM 통합 서비스
+ * OpenAI Based LLM Integration Service
  * 
- * 임베딩, 자동 태그 생성, 텍스트 생성 등 모든 LLM 관련 기능을 제공합니다.
+ * Provides all LLM related functions such as embedding, auto tag generation, text generation, etc.
  */
 export class LLMService implements ILLMService {
     private client: OpenAI;
@@ -23,35 +23,35 @@ export class LLMService implements ILLMService {
     private readonly CHAT_MODEL = "gpt-4o-mini";
 
     constructor(apiKey: string) {
-        // 🔧 API 키 검증 강화
+        // 🔧 Strengthen API Key Validation
         if (!apiKey || typeof apiKey !== 'string') {
-            console.error('[LLMService] 생성자: API 키가 문자열이 아님:', typeof apiKey);
-            throw new Error('OpenAI API 키가 유효하지 않습니다');
+            console.error('[LLMService] Constructor: API Key is not a string:', typeof apiKey);
+            throw new Error('OpenAI API Key is invalid');
         }
 
         if (apiKey.trim().length === 0) {
-            console.error('[LLMService] 생성자: API 키가 비어있음');
-            throw new Error('OpenAI API 키가 비어있습니다');
+            console.error('[LLMService] Constructor: API Key is empty');
+            throw new Error('OpenAI API Key is empty');
         }
 
         if (!apiKey.startsWith('sk-')) {
-            console.error('[LLMService] 생성자: API 키 형식 오류 (sk-로 시작해야 함)');
-            throw new Error('OpenAI API 키 형식이 올바르지 않습니다 (sk-로 시작해야 함)');
+            console.error('[LLMService] Constructor: API Key format error (must start with sk-)');
+            throw new Error('OpenAI API Key format is invalid (must start with sk-)');
         }
 
-        console.log('[LLMService] 초기화 중...');
-        console.log(`[LLMService] API 키 길이: ${apiKey.length}`);
-        console.log(`[LLMService] API 키 접두사: ${apiKey.substring(0, 7)}...`);
+        console.log('[LLMService] Initializing...');
+        console.log(`[LLMService] API Key Length: ${apiKey.length}`);
+        console.log(`[LLMService] API Key Prefix: ${apiKey.substring(0, 7)}...`);
 
         try {
             this.client = new OpenAI({
                 apiKey: apiKey,
                 dangerouslyAllowBrowser: true
             });
-            console.log('[LLMService] ✅ OpenAI 클라이언트 초기화 완료');
+            console.log('[LLMService] ✅ OpenAI Client Initialization Complete');
         } catch (error) {
-            console.error('[LLMService] OpenAI 클라이언트 초기화 실패:', error);
-            throw new Error(`OpenAI 클라이언트 초기화 실패: ${(error as Error).message}`);
+            console.error('[LLMService] OpenAI Client Initialization Failed:', error);
+            throw new Error(`OpenAI Client Initialization Failed: ${(error as Error).message}`);
         }
     }
 
@@ -68,16 +68,16 @@ export class LLMService implements ILLMService {
     // ==================== 임베딩 메서드 ====================
 
     /**
-     * 단일 텍스트 임베딩 생성
+     * Generate Single Text Embedding
      */
     async embeddingOneText(text: string): Promise<number[]> {
         this.validateClient();
-        // 🔧 입력 검증 추가
+        // 🔧 Add Input Validation
         const cleanedText = this.cleanTextForEmbedding(text);
-        
+
         if (!cleanedText || cleanedText.trim().length === 0) {
-            console.warn('[LLMService] 빈 텍스트 건너뜀');
-            throw new Error('빈 텍스트는 임베딩할 수 없습니다');
+            console.warn('[LLMService] Skipping empty text');
+            throw new Error('Empty text cannot be embedded');
         }
 
         try {
@@ -89,7 +89,7 @@ export class LLMService implements ILLMService {
 
             const vector = response.data[0].embedding;
             this.validateVector(vector);
-            
+
             return vector;
         } catch (error) {
             console.error('임베딩 생성 실패:', error);
@@ -116,7 +116,7 @@ export class LLMService implements ILLMService {
         const texts = validBlocks.map(block => {
             const cleaned = this.cleanTextForEmbedding(block.text);
             // OpenAI 토큰 제한: 최대 8191 토큰 (약 30,000자)
-            return cleaned.length > 30000 
+            return cleaned.length > 30000
                 ? cleaned.substring(0, 30000) + '...'
                 : cleaned;
         });
@@ -148,7 +148,7 @@ export class LLMService implements ILLMService {
 
         } catch (error) {
             console.error(`[LLMService] ${blocks.fileName} 블록 임베딩 실패:`, error);
-            
+
             // 🔧 상세 에러 로깅
             if (error instanceof Error) {
                 console.error('에러 상세:', {
@@ -158,7 +158,7 @@ export class LLMService implements ILLMService {
                     sampleTexts: texts.slice(0, 3).map(t => t.substring(0, 100))
                 });
             }
-            
+
             throw new Error(`블록 임베딩 중 오류 발생: ${(error as Error).message}`);
         }
     }
@@ -215,7 +215,7 @@ export class LLMService implements ILLMService {
             ) as AutoTagResponse;
 
             // 태그 정규화
-            result.tags = result.tags.map((tag: string) => 
+            result.tags = result.tags.map((tag: string) =>
                 tag.toLowerCase().trim().replace(/\s+/g, '-')
             );
 
@@ -281,24 +281,24 @@ export class LLMService implements ILLMService {
 
         console.log('[LLMService] ✅ API 키 업데이트 완료');
     }
-    
+
     /**
-     * 벡터 유효성 검증
+     * Validate Vector
      */
     private validateVector(vector: number[]): void {
         if (vector.length !== this.EMBEDDING_DIMENSIONS) {
             throw new Error(
-                `잘못된 벡터 차원: ${vector.length} (예상: ${this.EMBEDDING_DIMENSIONS})`
+                `Invalid vector dimensions: ${vector.length} (Expected: ${this.EMBEDDING_DIMENSIONS})`
             );
         }
 
         if (vector.some(v => isNaN(v))) {
-            throw new Error('벡터에 NaN 값이 포함되어 있습니다');
+            throw new Error('Vector contains NaN values');
         }
     }
 
     /**
-     * 자동 태그 생성용 시스템 프롬프트
+     * Auto Tag Generation System Prompt
      */
     private buildAutoTagSystemPrompt(
         maxTags: number,
@@ -306,45 +306,45 @@ export class LLMService implements ILLMService {
         includeReasoning: boolean
     ): string {
         const reasoningInstruction = includeReasoning
-            ? '\n- "reasoning": 태그를 선택한 이유를 간단히 설명합니다.'
+            ? '\n- "reasoning": Briefly explain why the tag was chosen.'
             : '';
 
-        return `당신은 문서 분석 전문가입니다. 주어진 마크다운 문서를 분석하여 적절한 태그를 자동으로 생성합니다.
+        return `You are a document analysis expert. Analyze the given markdown document and automatically generate appropriate tags.
 
-**자동 태그 생성 기준:**
-1. 문서의 핵심 주제와 개념을 반영
-2. 구체적이고 검색 가능한 키워드 사용
-3. 중복되거나 지나치게 일반적인 태그 제외
-4. 최대 ${maxTags}개까지 생성
-5. ${language === 'ko' ? '한국어' : '영어'} 태그 사용
+**Auto Tag Generation Criteria:**
+1. Reflect the core topics and concepts of the document
+2. Use specific and searchable keywords
+3. Exclude duplicate or overly generic tags
+4. Generate up to ${maxTags} tags
+5. Use ${language === 'ko' ? 'Korean' : 'English'} tags
 
-**응답 형식 (JSON):**
+**Response Format (JSON):**
 {
-  "tags": ["태그1", "태그2", ...],
+  "tags": ["tag1", "tag2", ...],
   "confidence": 0.85${reasoningInstruction}
 }
 
-**태그 명명 규칙:**
-- 소문자 사용
-- 공백 대신 언더바(_) 사용
-- 특수문자 제외
-- 간결하고 명확한 표현`;
+**Tag Naming Convention:**
+- Use lowercase
+- Use underscores (_) instead of spaces
+- Exclude special characters
+- Concise and clear expressions`;
     }
 
     /**
-     * 자동 태그 생성용 사용자 프롬프트
+     * Auto Tag Generation User Prompt
      */
     private buildAutoTagUserPrompt(content: string, fileName: string): string {
         const maxContentLength = 8000;
         const truncatedContent = content.length > maxContentLength
-            ? content.substring(0, maxContentLength) + '\n\n[... 이하 생략 ...]'
+            ? content.substring(0, maxContentLength) + '\n\n[... Omitted below ...]'
             : content;
 
-        return `다음 문서를 분석하여 태그를 자동으로 생성해주세요.
+        return `Please analyze the following document and generate tags automatically.
 
-**파일명:** ${fileName}
+**FileName:** ${fileName}
 
-**문서 내용:**
+**Document Content:**
 \`\`\`markdown
 ${truncatedContent}
 \`\`\``;

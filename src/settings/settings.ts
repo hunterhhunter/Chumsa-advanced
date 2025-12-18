@@ -1,24 +1,24 @@
-export type HeadingLevel = 'h1'|'h2'|'h3'|'h4'|'h5'|'h6';
+export type HeadingLevel = 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
 
 export interface ChumsaSettings {
     OPENAI_API_KEY: string;
-    // 기존 spliter는 유지(하위호환), 새로 headingLevel 사용
+    // Existing spliter is maintained (backward compatibility), newly using headingLevel
     spliter: string;
     indexFileName: string;
     headingLevel: HeadingLevel;
 
-    // 자동 태그 설정
+    // Auto Tag Settings
     autoTagMaxTags: number;
     autoTagLanguage: string;
 }
 
 export const HEADING_CONFIGS: Record<HeadingLevel, { tag: HeadingLevel; splitter: string; label: string }> = {
-    h1: { tag: 'h1', splitter: '# ',     label: 'Header 1' },
-    h2: { tag: 'h2', splitter: '## ',    label: 'Header 2' },
-    h3: { tag: 'h3', splitter: '### ',   label: 'Header 3' },
-    h4: { tag: 'h4', splitter: '#### ',  label: 'Header 4' },
+    h1: { tag: 'h1', splitter: '# ', label: 'Header 1' },
+    h2: { tag: 'h2', splitter: '## ', label: 'Header 2' },
+    h3: { tag: 'h3', splitter: '### ', label: 'Header 3' },
+    h4: { tag: 'h4', splitter: '#### ', label: 'Header 4' },
     h5: { tag: 'h5', splitter: '##### ', label: 'Header 5' },
-    h6: { tag: 'h6', splitter: '###### ',label: 'Header 6' },
+    h6: { tag: 'h6', splitter: '###### ', label: 'Header 6' },
 };
 
 export function getHeadingConfig(level: HeadingLevel) {
@@ -27,11 +27,11 @@ export function getHeadingConfig(level: HeadingLevel) {
 
 export const DEFAULT_SETTINGS: ChumsaSettings = {
     OPENAI_API_KEY: "",
-    spliter: "### ",           // 기존 필드 유지
+    spliter: "### ",           // Maintain existing field
     indexFileName: "indexFile",
-    headingLevel: 'h3',        // 신규: 기본값 H3
+    headingLevel: 'h3',        // New: Default H3
 
-    // 자동 태그 기본값
+    // Auto Tag Defaults
     autoTagMaxTags: 8,
-    autoTagLanguage: 'ko',
+    autoTagLanguage: 'en',
 };

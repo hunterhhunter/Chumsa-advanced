@@ -17,9 +17,9 @@ export class DocumentService {
 
         this.llmService = new LLMService(apiKey);
     }
-    
+
     /**
-     * 한 문서 저장 함수
+     * Save one document
      */
     public async saveOneDocument(filePath: string, spliter: string = "### ") {
         const normalizedPath = normalizePath(filePath);
@@ -34,7 +34,7 @@ export class DocumentService {
             const content = await this.app.vault.read(file);
             const fileName = file.basename;
 
-            console.log(`[DocumentService] 문서 파싱 시작: ${fileName}`);
+            console.log(`[DocumentService] Start parsing document: ${fileName}`);
             const blocks = parseMarkdownByHeadings(
                 normalizedPath,
                 fileName,
@@ -42,113 +42,113 @@ export class DocumentService {
                 spliter
             );
 
-            // 🔧 빈 블록 체크
+            // 🔧 Check empty blocks
             if (!blocks.blocks || blocks.blocks.length === 0) {
-                console.warn(`[DocumentService] ${fileName}: 파싱된 블록이 없습니다`);
-                new Notice(`⚠️ "${fileName}": 인덱싱할 내용이 없습니다`);
+                console.warn(`[DocumentService] ${fileName}: No parsed blocks`);
+                new Notice(`⚠️ "${fileName}": No content to index`);
                 return;
             }
 
-            console.log(`[DocumentService] ${fileName}: ${blocks.blocks.length}개 블록 파싱 완료`);
+            console.log(`[DocumentService] ${fileName}: ${blocks.blocks.length} blocks parsed`);
 
-            // 임베딩 생성
+            // Generate Embedding
             const embededData = await this.llmService.embeddingBlocks(blocks);
 
-            // 🔧 임베딩 실패 체크
+            // 🔧 Check embedding failure
             if (!embededData || embededData.length === 0) {
-                console.warn(`[DocumentService] ${fileName}: 임베딩 생성 실패 (빈 결과)`);
-                new Notice(`⚠️ "${fileName}": 임베딩 생성 실패`);
+                console.warn(`[DocumentService] ${fileName}: Embedding generation failed (empty result)`);
+                new Notice(`⚠️ "${fileName}": Embedding generation failed`);
                 return;
             }
 
-            console.log(`[DocumentService] ${fileName}: ${embededData.length}개 임베딩 생성 완료`);
+            console.log(`[DocumentService] ${fileName}: ${embededData.length} embeddings generated`);
 
-            // DB에 저장
+            // Save to DB
             await this.database.addItems(blocks, embededData);
 
-            console.log(`[DocumentService] ✅ ${fileName} 저장 완료`);
+            console.log(`[DocumentService] ✅ ${fileName} Save Complete`);
 
         } catch (error) {
-            console.error(`[DocumentService] ${file.basename} 저장 실패:`, error);
-            throw error; // 상위로 전파
+            console.error(`[DocumentService] ${file.basename} Save Failed:`, error);
+            throw error; // Propagate up
         }
     }
 
     /**
-     * 🆕 한 문서 업데이트 함수
-     * 기존 블록을 삭제하고 새로운 블록으로 교체
+     * 🆕 Update one document
+     * Delete existing blocks and replace with new blocks
      */
     public async updateOneDocument(
-        filePath: string, 
+        filePath: string,
         spliter: string = "### "
     ): Promise<{ updated: boolean; blockCount: number; reason: string }> {
         const normalizedPath = normalizePath(filePath);
 
-        // 1. 파일이 인덱싱되어 있는지 확인
+        // 1. Check if file is indexed
         if (!this.database.hasFile(normalizedPath)) {
-            console.log(`[DocumentService] 파일이 인덱싱되지 않음: ${normalizedPath}`);
-            return { 
-                updated: false, 
-                blockCount: 0, 
-                reason: "파일이 인덱싱되지 않음. saveOneDocument를 사용하세요." 
+            console.log(`[DocumentService] File not indexed: ${normalizedPath}`);
+            return {
+                updated: false,
+                blockCount: 0,
+                reason: "File not indexed. Use saveOneDocument."
             };
         }
 
         try {
-            // 2. 기존 블록 삭제
+            // 2. Delete existing blocks
             const existingBlockIds = this.database.getFileBlockIds(normalizedPath);
-            console.log(`[DocumentService] 기존 블록 삭제 중: ${existingBlockIds.length}개`);
-            
+            console.log(`[DocumentService] Deleting existing blocks: ${existingBlockIds.length}`);
+
             await this.database.deleteFileBlocks(normalizedPath);
 
-            console.log(`[DocumentService] 삭제 완료, 인덱스 저장 중...`);
+            console.log(`[DocumentService] Deletion complete, saving index...`);
             await this.database.saveData();
 
             await new Promise(resolve => setTimeout(resolve, 100));
 
-            // 3. 파일 읽기 및 파싱
+            // 3. Read and parse file
             const content = await this.app.vault.adapter.read(normalizedPath);
             const fileName = filePath.split('/').pop()!;
             const blocks = parseMarkdownByHeadings(filePath, fileName, content, spliter);
 
             if (blocks.blocks.length === 0) {
-                console.warn(`[DocumentService] 파싱된 블록 없음: ${normalizedPath}`);
-                return { 
-                    updated: false, 
-                    blockCount: 0, 
-                    reason: "파싱된 블록 없음" 
+                console.warn(`[DocumentService] No parsed blocks: ${normalizedPath}`);
+                return {
+                    updated: false,
+                    blockCount: 0,
+                    reason: "No parsed blocks"
                 };
             }
 
-            // 4. 임베딩 생성
+            // 4. Generate Embedding
             const embeddedData = await this.llmService.embeddingBlocks(blocks);
 
-            // 5. 새 블록 추가
+            // 5. Add new blocks
             await this.database.addItems(blocks, embeddedData);
             await this.database.saveData();
 
             console.log(
-                `[DocumentService] ✅ 업데이트 완료: ${normalizedPath} ` +
-                `(${existingBlockIds.length}개 → ${blocks.blocks.length}개 블록)`
+                `[DocumentService] ✅ Update Complete: ${normalizedPath} ` +
+                `(${existingBlockIds.length} → ${blocks.blocks.length} blocks)`
             );
 
-            return { 
-                updated: true, 
-                blockCount: blocks.blocks.length, 
-                reason: "업데이트 완료" 
+            return {
+                updated: true,
+                blockCount: blocks.blocks.length,
+                reason: "Update Complete"
             };
 
         } catch (error) {
-            console.error(`[DocumentService] 업데이트 실패: ${normalizedPath}`, error);
+            console.error(`[DocumentService] Update Failed: ${normalizedPath}`, error);
             throw error;
         }
     }
 
     /**
-     * Vault 전체 순회 및 저장 함수
+     * Traverse and save entire Vault
      */
     public async saveVault(allFilePaths: TFile[], batchSize: number = 10, spliter: string = "### ") {
-        console.log(`[DocumentService] 전체 임베딩 시작: ${allFilePaths.length}개 파일`);
+        console.log(`[DocumentService] Full Embedding Start: ${allFilePaths.length} files`);
 
         let successCount = 0;
         let failCount = 0;
@@ -156,18 +156,18 @@ export class DocumentService {
 
         for (let i = 0; i < allFilePaths.length; i += batchSize) {
             const batch = allFilePaths.slice(i, i + batchSize);
-            
+
             console.log(
-                `[DocumentService] 배치 ${Math.floor(i / batchSize) + 1}/${Math.ceil(allFilePaths.length / batchSize)}: ` +
+                `[DocumentService] Batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(allFilePaths.length / batchSize)}: ` +
                 `${batch.map(f => f.basename).join(', ')}`
             );
 
-            // 🔧 Promise.allSettled로 에러 격리
+            // 🔧 Isolate errors with Promise.allSettled
             const results = await Promise.allSettled(
                 batch.map(file => this.saveOneDocument(file.path, spliter))
             );
 
-            // 결과 집계
+            // Aggregate results
             results.forEach((result, idx) => {
                 if (result.status === 'fulfilled') {
                     successCount++;
@@ -175,11 +175,11 @@ export class DocumentService {
                     failCount++;
                     const fileName = batch[idx].basename;
                     failedFiles.push(fileName);
-                    console.error(`[DocumentService] ${fileName} 실패:`, result.reason);
+                    console.error(`[DocumentService] ${fileName} Failed:`, result.reason);
                 }
             });
 
-            // API Rate Limit 방지 (1초 대기)
+            // Prevent API Rate Limit (Wait 1s)
             if (i + batchSize < allFilePaths.length) {
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
@@ -188,18 +188,18 @@ export class DocumentService {
         await this.database.saveData();
 
         console.log(
-            `[DocumentService] 전체 임베딩 완료: ` +
-            `성공 ${successCount}개, 실패 ${failCount}개`
+            `[DocumentService] Full Embedding Complete: ` +
+            `Success ${successCount}, Fail ${failCount}`
         );
 
         if (failedFiles.length > 0) {
-            console.warn(`[DocumentService] 실패한 파일 목록:`, failedFiles);
+            console.warn(`[DocumentService] Failed Files List:`, failedFiles);
         }
 
         return { successCount, failCount, failedFiles };
     }
 
-    // 파일 이동시(Path 변경시) 감지 및 변경함수
+    // Detect file move (Path change) and handle
     public renameFilePath(oldPath: string, newPath: string) {
         this.database.renameFilePath(oldPath, newPath);
     }
@@ -212,7 +212,7 @@ export class DocumentService {
         // console.log(`documentservice queryvector: ${queryVector}`);
 
         const searchResult = await this.database.search(queryVector, 10);
-        
+
         // for (const each of searchResult) {
         //     console.log(`---------------------------------------------`);
         //     console.log(`ID: ${each.id}, score: ${each.score}, fileName: ${each.metadata.fileName}, key: ${each.block.key}`);
@@ -231,19 +231,19 @@ export class DocumentService {
     ): Promise<AutoTagResponse> {
         const normalizedPath = normalizePath(filePath);
         const file = this.app.vault.getAbstractFileByPath(normalizedPath);
-        
+
         if (!(file instanceof TFile)) {
-            throw new Error(`파일을 찾을 수 없습니다: ${filePath}`);
+            throw new Error(`File not found: ${filePath}`);
         }
 
         try {
-            // 파일 내용 읽기
+            // Read file content
             const content = await this.app.vault.read(file);
             const fileName = file.basename;
 
-            console.log(`[DocumentService] 자동 태그 생성 시작: ${fileName}`);
+            console.log(`[DocumentService] Auto Tag Generation Start: ${fileName}`);
 
-            // LLM을 통한 태그 생성
+            // Generate tags via LLM
             const response = await this.llmService.generateAutoTags(
                 content,
                 fileName,
@@ -251,15 +251,15 @@ export class DocumentService {
             );
 
             console.log(
-                `[DocumentService] ✅ 자동 태그 생성 완료: ${fileName} - ` +
-                `${response.tags.length}개 태그 (신뢰도: ${(response.confidence || 0) * 100}%)`
+                `[DocumentService] ✅ Auto Tag Generation Complete: ${fileName} - ` +
+                `${response.tags.length} tags (Confidence: ${(response.confidence || 0) * 100}%)`
             );
 
             return response;
 
         } catch (error) {
-            console.error(`[DocumentService] 자동 태그 생성 실패: ${filePath}`, error);
-            throw new Error(`자동 태그 생성 중 오류 발생: ${error.message}`);
+            console.error(`[DocumentService] Auto Tag Generation Failed: ${filePath}`, error);
+            throw new Error(`Error during auto tag generation: ${error.message}`);
         }
     }
 
@@ -269,32 +269,32 @@ export class DocumentService {
     ): Promise<AutoTagResult> {
         const normalizedPath = normalizePath(filePath);
         const file = this.app.vault.getAbstractFileByPath(normalizedPath);
-        
+
         if (!(file instanceof TFile)) {
-            throw new Error(`파일을 찾을 수 없습니다: ${filePath}`);
+            throw new Error(`File not found: ${filePath}`);
         }
 
         try {
-            // 1. 자동 태그 생성
+            // 1. Generate auto tags
             const response = await this.generateAutoTags(normalizedPath, options);
 
-            // 2. 기존 태그 읽기
+            // 2. Read existing tags
             const existingTags = await this.getExistingTags(file);
 
-            // 3. 새로운 태그만 필터링
+            // 3. Filter only new tags
             const addedTags = response.tags.filter(
                 tag => !existingTags.includes(tag)
             );
 
-            // 4. Frontmatter에 태그 추가
+            // 4. Add tags to Frontmatter
             if (addedTags.length > 0) {
                 await this.addTagsToFrontmatter(file, addedTags);
                 console.log(
-                    `[DocumentService] ✅ 태그 적용 완료: ${file.basename} - ` +
-                    `${addedTags.length}개 추가 (${addedTags.join(', ')})`
+                    `[DocumentService] ✅ Tags Applied: ${file.basename} - ` +
+                    `${addedTags.length} added (${addedTags.join(', ')})`
                 );
             } else {
-                console.log(`[DocumentService] 추가할 새 태그 없음: ${file.basename}`);
+                console.log(`[DocumentService] No new tags to add: ${file.basename}`);
             }
 
             return {
@@ -307,13 +307,13 @@ export class DocumentService {
             };
 
         } catch (error) {
-            console.error(`[DocumentService] 자동 태그 적용 실패: ${filePath}`, error);
+            console.error(`[DocumentService] Auto Tag Application Failed: ${filePath}`, error);
             throw error;
         }
     }
 
     /**
-     * 파일의 기존 태그 읽기
+     * Read existing tags of a file
      */
     private async getExistingTags(file: TFile): Promise<string[]> {
         const cache = this.app.metadataCache.getFileCache(file);
@@ -323,17 +323,17 @@ export class DocumentService {
             return [];
         }
 
-        // 태그가 문자열인 경우
+        // if tags is string
         if (typeof frontmatter.tags === 'string') {
             return [frontmatter.tags];
         }
 
-        // 태그가 배열인 경우
+        // if tags is array
         return Array.isArray(frontmatter.tags) ? frontmatter.tags : [];
     }
 
     /**
-     * Frontmatter에 태그 추가 (기존 태그 유지)
+     * Add tags to Frontmatter (Keep existing tags)
      */
     private async addTagsToFrontmatter(
         file: TFile,
@@ -342,30 +342,30 @@ export class DocumentService {
         let content = await this.app.vault.read(file);
         const existingTags = await this.getExistingTags(file);
 
-        // 중복 제거 후 병합
+        // Deduplicate and Merge
         const allTags = Array.from(new Set([...existingTags, ...newTags]));
 
-        // Frontmatter 업데이트
+        // Update Frontmatter
         const tagsYaml = `tags:\n${allTags.map(tag => `  - ${tag}`).join('\n')}`;
 
         if (content.startsWith('---')) {
-            // 기존 frontmatter 수정
+            // Modify existing frontmatter
             const frontmatterEnd = content.indexOf('---', 3);
             if (frontmatterEnd !== -1) {
                 let frontmatter = content.substring(3, frontmatterEnd);
 
-                // 기존 tags 필드 제거
+                // Remove existing tags field
                 frontmatter = frontmatter.replace(
                     /tags:[\s\S]*?(?=\n[a-z_]|\n---|\n$)/i,
                     ''
                 );
 
-                // 새 tags 추가
+                // Add new tags
                 const updatedFrontmatter = frontmatter.trim() + '\n' + tagsYaml;
                 content = `---\n${updatedFrontmatter}\n---` + content.substring(frontmatterEnd + 3);
             }
         } else {
-            // Frontmatter 새로 생성
+            // Create new Frontmatter
             content = `---\n${tagsYaml}\n---\n\n${content}`;
         }
 
